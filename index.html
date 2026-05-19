@@ -423,7 +423,7 @@ function fOrders(){
   const tb=document.getElementById('otb');if(!tb)return;
   tb.innerHTML=f.length?f.map(o=>{
     const slaTd=o.invoiced?'<span class="badge b-inv">Invoiced</span>':sla(o.due,o.status);
-    const mv=o.status==='Completed'&&!o.invoiced?`<button class="btn btn-sm" onclick="mov2inv('${o.id}')" style="font-size:10px">→Inv</button> `:'';
+    const mv=o.status==='Completed'&&!o.invoiced?`<button class="btn btn-sm" style="font-size:10px;background:#276749;color:#fff;border-color:#276749;margin-right:3px" onclick="completedToInvoice('${o.id}')">→ Finance</button>`:'';
     return `<tr><td class="mono">${o.ref}</td><td title="${o.client}">${o.client}</td><td><span class="badge b-bu">${o.bu}</span></td><td class="mono">${R(+o.order_val)}</td><td class="mono" style="font-size:11px">${fd(o.due)}</td><td>${slaTd}</td><td style="text-align:center">${o.job_cards||0}</td><td><span class="badge ${obadge(o.status)}">${o.status}</span></td><td>${mv}<button class="btn-g" onclick="oOrder('${o.id}')">✎</button><button class="btn-d" onclick="dOrder('${o.id}')">✕</button></td></tr>`;
   }).join(''):'<tr><td colspan="9" class="empty">No records match</td></tr>';
 }
@@ -575,9 +575,4 @@ function expFin(){
 
 // ── STARTUP ──────────────────────────────────────────
 window.onload=()=>{
-  const s=sessionStorage.getItem('mm');
-  if(s){cUser=JSON.parse(s);launch();}
-};
-</script>
-</body>
-</html>
+  const s=sessionStorage.
