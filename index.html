@@ -575,4 +575,9 @@ function expFin(){
 
 // ── STARTUP ──────────────────────────────────────────
 window.onload=()=>{
-  const s=sessionStorage.
+  const s=sessionStorage.getItem('mm');
+  if(s){cUser=JSON.parse(s);launch();}
+};
+</script>
+</body>
+</html>
