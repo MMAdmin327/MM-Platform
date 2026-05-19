@@ -275,7 +275,7 @@ function sla(due,status){
   if(d===0)return `<span class="sla-warn">Today</span>`;
   return `<span class="sla-ok">${d}d left</span>`;
 }
-const lbadge=s=>({Lead:'b-lead',Quoted:'b-quoted',Won:'b-won',Lost:'b-lost'}[s]||'b-lead');
+const lbadge=s=>({Lead:'b-lead',Quoted:'b-quoted',Won:'b-won',Lost:'b-lost',Moved:'b-inv'}[s]||'b-lead');
 const obadge=s=>({Open:'b-open','In progress':'b-prog',Completed:'b-done'}[s]||'b-open');
 
 let _tt;
@@ -372,10 +372,11 @@ function rLeads(){
 function fLeads(){
   const s=(document.getElementById('ls')||{}).value?.toLowerCase()||'';
   const bu=gv('lbu'),st=gv('lst');
-  const f=leads.filter(l=>(l.client+l.ref+l.type+l.bu).toLowerCase().includes(s)&&(!bu||l.bu===bu)&&(!st||l.status===st));
+  const f=leads.filter(l=>l.status!=='Moved')
+    .filter(l=>(l.client+l.ref+l.type+l.bu).toLowerCase().includes(s)&&(!bu||l.bu===bu)&&(!st||l.status===st));
   const tb=document.getElementById('ltb');if(!tb)return;
   tb.innerHTML=f.length?f.map(l=>{
-    const canMove=['Quoted','Won'].includes(l.status);
+    const canMove=['Quoted','Won'].includes(l.status)&&l.status!=='Moved';
     const moveBtn=canMove?`<button class="btn btn-sm" style="font-size:10px;background:#276749;color:#fff;border-color:#276749;margin-right:3px" onclick="wonToOrder('${l.id}')">→ Order Book</button>`:'';
     return `<tr><td class="mono">${l.ref}</td><td title="${l.client}">${l.client}</td><td><span class="badge b-bu">${l.bu}</span></td><td style="font-size:11px">${l.type}</td><td class="mono" style="font-size:11px">${fd(l.quote_due)}</td><td>${sla(l.quote_due,l.status)}</td><td class="mono">${+l.quote_val>0?R(+l.quote_val):'TBD'}</td><td><span class="badge ${lbadge(l.status)}">${l.status}</span></td><td>${moveBtn}<button class="btn-g" onclick="oLead('${l.id}')">✎</button><button class="btn-d" onclick="dLead('${l.id}')">✕</button></td></tr>`;
   }).join(''):'<tr><td colspan="9" class="empty">No records match</td></tr>';
@@ -416,7 +417,7 @@ async function confirmWon(leadId){
   const order={ref:gv('wOr'),client:gv('wOc'),bu:gv('wOb'),type:gv('wOt'),order_val:+gv('wOv')||0,received:fmtDate(gv('wOrec')),due:fmtDate(gv('wOd')),status:'Open',job_cards:0,invoiced:false,notes:gv('wOn')};
   try{
     await POST('orders',order);
-    await PATCH('leads','id=eq.'+leadId,{status:'Won'});
+    await PATCH('leads','id=eq.'+leadId,{status:'Moved'});
     closeM();await load();fLeads();
     toast('Moved to Order Book successfully','s');
   }catch(e){toast(e.message,'e');}
@@ -447,7 +448,8 @@ function rOrders(){
 function fOrders(){
   const s=(document.getElementById('os')||{}).value?.toLowerCase()||'';
   const bu=gv('obu'),st=gv('ost');
-  const f=orders.filter(o=>(o.client+o.ref+o.bu).toLowerCase().includes(s)&&(!bu||o.bu===bu)&&(!st||o.status===st));
+  const f=orders.filter(o=>!o.invoiced)
+    .filter(o=>(o.client+o.ref+o.bu).toLowerCase().includes(s)&&(!bu||o.bu===bu)&&(!st||o.status===st));
   const tb=document.getElementById('otb');if(!tb)return;
   tb.innerHTML=f.length?f.map(o=>{
     const slaTd=o.invoiced?'<span class="badge b-inv">Invoiced</span>':sla(o.due,o.status);
@@ -636,9 +638,4 @@ function expFin(){
 
 // ── STARTUP ──────────────────────────────────────────
 window.onload=()=>{
-  const s=sessionStorage.getItem('mm');
-  if(s){cUser=JSON.parse(s);launch();}
-};
-</script>
-</body>
-</html>
+  const s
