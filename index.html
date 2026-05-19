@@ -190,7 +190,7 @@ tr:hover td{background:#f8fafc}
 const SB  = 'https://egcmleyqbtjdwuspgbsi.supabase.co';
 const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnY21sZXlxYnRqZHd1c3BnYnNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwOTQ3MDgsImV4cCI6MjA5NDY3MDcwOH0.Bc43J1OzmTKaVNCdKT1bXvIfak1jcxmCqVuyJKZINfw';
 const HDR = {'apikey':KEY,'Authorization':'Bearer '+KEY};
-const WHDР = {'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'};
+const WHDR = {'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'};
 const BUS = ['Fabrication','Construction','Pumps','TMM','Motors','Wear Protection','Mining Supplies','Laser Cutting'];
 const USERS = [
   {u:'martin',  p:'MM@Admin2026', name:'Martin Spies',       role:'CEO'},
@@ -213,17 +213,17 @@ async function GET(t,q=''){
   return r.json();
 }
 async function POST(t,b){
-  const r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:WHDР,body:JSON.stringify(b)});
+  const r=await fetch(SB+'/rest/v1/'+t,{method:'POST',headers:WHDR,body:JSON.stringify(b)});
   if(!r.ok){const e=await r.json();throw new Error(e.message||'Error');}
   return r.json();
 }
 async function PATCH(t,q,b){
-  const r=await fetch(SB+'/rest/v1/'+t+'?'+q,{method:'PATCH',headers:WHDР,body:JSON.stringify(b)});
+  const r=await fetch(SB+'/rest/v1/'+t+'?'+q,{method:'PATCH',headers:WHDR,body:JSON.stringify(b)});
   if(!r.ok){const e=await r.json();throw new Error(e.message||'Error');}
   return r.json();
 }
 async function DEL(t,q){
-  await fetch(SB+'/rest/v1/'+t+'?'+q,{method:'DELETE',headers:WHDР});
+  await fetch(SB+'/rest/v1/'+t+'?'+q,{method:'DELETE',headers:WHDR});
 }
 
 async function load(){
