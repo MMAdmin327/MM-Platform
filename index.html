@@ -374,7 +374,11 @@ function fLeads(){
   const bu=gv('lbu'),st=gv('lst');
   const f=leads.filter(l=>(l.client+l.ref+l.type+l.bu).toLowerCase().includes(s)&&(!bu||l.bu===bu)&&(!st||l.status===st));
   const tb=document.getElementById('ltb');if(!tb)return;
-  tb.innerHTML=f.length?f.map(l=>`<tr><td class="mono">${l.ref}</td><td title="${l.client}">${l.client}</td><td><span class="badge b-bu">${l.bu}</span></td><td style="font-size:11px">${l.type}</td><td class="mono" style="font-size:11px">${fd(l.quote_due)}</td><td>${sla(l.quote_due,l.status)}</td><td class="mono">${+l.quote_val>0?R(+l.quote_val):'TBD'}</td><td><span class="badge ${lbadge(l.status)}">${l.status}</span></td><td><button class="btn-g" onclick="oLead('${l.id}')">✎</button><button class="btn-d" onclick="dLead('${l.id}')">✕</button></td></tr>`).join(''):'<tr><td colspan="9" class="empty">No records match</td></tr>';
+  tb.innerHTML=f.length?f.map(l=>{
+    const canMove=['Quoted','Won'].includes(l.status);
+    const moveBtn=canMove?`<button class="btn btn-sm" style="font-size:10px;background:#276749;color:#fff;border-color:#276749;margin-right:3px" onclick="wonToOrder('${l.id}')">→ Order Book</button>`:'';
+    return `<tr><td class="mono">${l.ref}</td><td title="${l.client}">${l.client}</td><td><span class="badge b-bu">${l.bu}</span></td><td style="font-size:11px">${l.type}</td><td class="mono" style="font-size:11px">${fd(l.quote_due)}</td><td>${sla(l.quote_due,l.status)}</td><td class="mono">${+l.quote_val>0?R(+l.quote_val):'TBD'}</td><td><span class="badge ${lbadge(l.status)}">${l.status}</span></td><td>${moveBtn}<button class="btn-g" onclick="oLead('${l.id}')">✎</button><button class="btn-d" onclick="dLead('${l.id}')">✕</button></td></tr>`;
+  }).join(''):'<tr><td colspan="9" class="empty">No records match</td></tr>';
 }
 function oLead(id){
   const l=id?leads.find(x=>x.id===id):{};
@@ -393,6 +397,30 @@ async function sLead(id){
   try{id?await PATCH('leads','id=eq.'+id,b):await POST('leads',b);closeM();await load();fLeads();toast('Lead saved','s');}catch(e){toast(e.message,'e');}
 }
 function dLead(id){cfm('Delete lead','Permanently delete this lead?',async()=>{await DEL('leads','id=eq.'+id);await load();fLeads();toast('Deleted','s');});}
+
+function wonToOrder(id){
+  const l=leads.find(x=>x.id===id);if(!l)return;
+  const nr='MM'+String(orders.length+1).padStart(3,'0');
+  openM(`<div class="mtitle">✓ Move to Order Book</div>
+    <p style="font-size:12px;color:#718096;margin-bottom:14px">Review the order details pulled from the quote. Edit as needed then confirm.</p>
+    <div class="f2"><div class="mfr"><label>Job number</label><input id="wOr" value="${nr}"></div><div class="mfr"><label>Business unit</label>${buS('wOb',l.bu)}</div></div>
+    <div class="f2"><div class="mfr"><label>Client</label><input id="wOc" value="${l.client||''}"></div><div class="mfr"><label>Work type</label><input id="wOt" value="${l.type||''}"></div></div>
+    <div class="mfr"><label>Order value (R) — from quote value</label><input type="number" id="wOv" value="${l.quote_val||0}"></div>
+    <div class="f2"><div class="mfr"><label>Date received</label><input type="date" id="wOrec" value="${td()}"></div><div class="mfr"><label>Due date</label><input type="date" id="wOd"></div></div>
+    <div class="mfr"><label>Notes</label><textarea id="wOn">${l.notes||''}</textarea></div>
+    <div class="mfoot"><button class="btn" onclick="closeM()">Cancel</button><button class="btn btn-p" onclick="confirmWon('${id}')">✓ Confirm — move to Order Book</button></div>`);
+}
+
+async function confirmWon(leadId){
+  const l=leads.find(x=>x.id===leadId);if(!l)return;
+  const order={ref:gv('wOr'),client:gv('wOc'),bu:gv('wOb'),type:gv('wOt'),order_val:+gv('wOv')||0,received:fmtDate(gv('wOrec')),due:fmtDate(gv('wOd')),status:'Open',job_cards:0,invoiced:false,notes:gv('wOn')};
+  try{
+    await POST('orders',order);
+    await PATCH('leads','id=eq.'+leadId,{status:'Won'});
+    closeM();await load();fLeads();
+    toast('Moved to Order Book successfully','s');
+  }catch(e){toast(e.message,'e');}
+}
 function expLeads(){
   const f=leads.filter(l=>(!gv('lbu')||l.bu===gv('lbu'))&&(!gv('lst')||l.status===gv('lst')));
   xlx(f.map(l=>({a:l.ref,b:l.client,c:l.bu,d:l.type,e:l.contact,f:fd(l.received),g:fd(l.quote_due),h:l.status,i:+l.quote_val||0,j:l.notes})),[{k:'a',l:'Ref',w:14},{k:'b',l:'Client',w:22},{k:'c',l:'BU',w:18},{k:'d',l:'Type',w:16},{k:'e',l:'Contact',w:18},{k:'f',l:'Received',w:13},{k:'g',l:'Quote Due',w:12},{k:'h',l:'Status',w:10},{k:'i',l:'Quote Value',w:14},{k:'j',l:'Notes',w:30}],'MM_Leads.xlsx','New Business');
@@ -443,6 +471,39 @@ async function sOrder(id){
   try{id?await PATCH('orders','id=eq.'+id,b):await POST('orders',b);closeM();await load();fOrders();toast('Order saved','s');}catch(e){toast(e.message,'e');}
 }
 function dOrder(id){cfm('Delete order','Permanently delete this order?',async()=>{await DEL('orders','id=eq.'+id);await load();fOrders();toast('Deleted','s');});}
+
+function completedToInvoice(id){
+  const o=orders.find(x=>x.id===id);if(!o)return;
+  const linked=spos.filter(p=>p.job_ref===o.ref);
+  const matCost=linked.reduce((s,p)=>s+(+p.amount||0),0);
+  const linkedJCs=jcs.filter(j=>j.job_ref===o.ref);
+  const labourHrs=linkedJCs.reduce((s,j)=>s+(+j.actual_hrs||0),0);
+  const labourCost=Math.round(labourHrs*350);
+  const overhead=Math.round((+o.order_val||0)*0.08);
+  const nr='INV-'+new Date().getFullYear()+'-'+String(invs.length+1).padStart(3,'0');
+  openM(`<div class="mtitle">→ Move to Finance</div>
+    <p style="font-size:12px;color:#718096;margin-bottom:12px">Supplier PO values and job card hours pulled through automatically. All values editable.</p>
+    <div class="f2"><div class="mfr"><label>Invoice ref</label><input id="iRef" value="${nr}"></div><div class="mfr"><label>Invoice date</label><input type="date" id="iDate" value="${td()}"></div></div>
+    <div class="f2"><div class="mfr"><label>Client</label><input id="iCl" value="${o.client}" readonly style="background:#f4f6f9"></div><div class="mfr"><label>Invoice value (R)</label><input type="number" id="iVal" value="${o.order_val||0}"></div></div>
+    <div style="background:#f4f6f9;border-radius:6px;padding:11px;margin-bottom:11px;font-size:12px">
+      <div style="font-weight:600;margin-bottom:7px;color:#0f1923">Auto-calculated from job</div>
+      <div style="color:#718096">${linked.length} supplier PO${linked.length!==1?'s':''} — total ${'R '+matCost.toLocaleString('en-ZA')} &nbsp;|&nbsp; ${labourHrs} actual hrs × R350 = ${'R '+labourCost.toLocaleString('en-ZA')}</div>
+    </div>
+    <div class="f2"><div class="mfr"><label>Material cost (R)</label><input type="number" id="iMat" value="${matCost}"></div><div class="mfr"><label>Labour cost (R)</label><input type="number" id="iLab" value="${labourCost}"></div></div>
+    <div class="f2"><div class="mfr"><label>Overheads (R)</label><input type="number" id="iOH" value="${overhead}"></div><div class="mfr"><label>Status</label><select id="iSt"><option>Outstanding</option><option>Paid</option></select></div></div>
+    <div class="mfoot"><button class="btn" onclick="closeM()">Cancel</button><button class="btn btn-p" onclick="confirmInvoice('${id}')">✓ Confirm — move to Finance</button></div>`);
+}
+
+async function confirmInvoice(orderId){
+  const o=orders.find(x=>x.id===orderId);if(!o)return;
+  const inv={inv_ref:gv('iRef'),job_ref:o.ref,client:gv('iCl'),bu:o.bu,order_val:+gv('iVal')||0,mat_cost:+gv('iMat')||0,labour_cost:+gv('iLab')||0,overheads:+gv('iOH')||0,invoiced_date:fmtDate(gv('iDate')),status:gv('iSt')};
+  try{
+    await POST('invoices',inv);
+    await PATCH('orders','id=eq.'+orderId,{invoiced:true,status:'Completed'});
+    closeM();await load();fOrders();
+    toast('Invoice created — moved to Finance','s');
+  }catch(e){toast(e.message,'e');}
+}
 async function mov2inv(id){
   const o=orders.find(x=>x.id===id);if(!o)return;
   const j=jcs.filter(x=>x.job_ref===o.ref);
