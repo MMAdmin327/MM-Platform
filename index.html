@@ -1,1 +1,588 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mine Minerals — Operations Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--navy:#0f1923;--navy2:#1a2a3a;--gold:#c8a45a;--gold2:#e8c47a;--border:#e2e8f0;--bg:#f4f6f9;--surface:#fff;--text:#1a202c;--muted:#718096;--green:#276749;--green-bg:#f0fff4;--amber:#92400e;--amber-bg:#fffbeb;--red:#9b1c1c;--red-bg:#fff5f5;--blue:#1e3a5f;--blue-bg:#ebf4ff;--purple:#44337a;--purple-bg:#faf5ff;--purple-border:#d6bcfa;--r:6px;--rlg:10px}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:13px}
+/* LOGIN */
+#login{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--navy);padding:20px}
+.lcard{background:#fff;border-radius:16px;padding:40px;width:400px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.llogo{width:64px;height:64px;object-fit:contain;border-radius:8px;margin:0 auto 16px}
+.lco{font-size:16px;font-weight:600;color:var(--navy);margin-bottom:2px}
+.ltag{font-size:10px;color:var(--gold);font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-bottom:24px}
+.ldiv{height:1px;background:var(--border);margin:20px 0}
+.lform-title{font-size:13px;font-weight:600;text-align:left;margin-bottom:14px}
+.fr{margin-bottom:11px;text-align:left}
+.fr label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+.fr input{width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 11px;border:1.5px solid var(--border);border-radius:var(--r);outline:none}
+.fr input:focus{border-color:var(--navy)}
+.lbtn{width:100%;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:var(--r);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;margin-top:4px}
+.lbtn:hover{background:var(--navy2)}
+.lerr{background:var(--red-bg);border:1px solid #fed7d7;color:var(--red);border-radius:var(--r);padding:9px 12px;font-size:12px;margin-top:10px;display:none;text-align:left}
+/* APP */
+#app{display:none}
+.wrap{max-width:1440px;margin:0 auto;padding:14px}
+/* HEADER */
+.hdr{background:var(--navy);display:flex;align-items:stretch;min-height:56px;border-radius:10px 10px 0 0;overflow:hidden}
+.hdr-brand{background:var(--navy2);padding:0 18px;display:flex;align-items:center;gap:11px;border-right:1px solid rgba(255,255,255,.07)}
+.hdr-logo{width:36px;height:36px;object-fit:contain;border-radius:4px}
+.hdr-name{color:#fff;font-size:12px;font-weight:600}
+.hdr-sub{color:var(--gold);font-size:10px}
+.hdr-mid{flex:1;display:flex;align-items:center;padding:0 18px;gap:10px}
+.hdr-tag{background:rgba(200,164,90,.12);border:1px solid rgba(200,164,90,.25);color:var(--gold2);font-size:10px;font-weight:600;padding:3px 10px;border-radius:20px;letter-spacing:.06em;text-transform:uppercase}
+.hdr-date{color:rgba(255,255,255,.35);font-size:11px;font-family:'DM Mono',monospace;margin-left:auto}
+.hdr-right{display:flex;align-items:center;gap:12px;padding:0 16px;border-left:1px solid rgba(255,255,255,.07)}
+.sync-wrap{display:flex;align-items:center;gap:5px}
+.sdot{width:7px;height:7px;border-radius:50%;background:#38a169;transition:background .3s}
+.sdot.syncing{background:var(--gold);animation:blink 1s infinite}
+.sdot.err{background:#fc8181}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.slbl{font-size:10px;color:rgba(255,255,255,.45);font-family:'DM Mono',monospace}
+.hdr-uname{color:#fff;font-size:12px;font-weight:500}
+.hdr-urole{color:rgba(255,255,255,.4);font-size:10px}
+.btn-out{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-family:'DM Sans',sans-serif;font-size:11px;padding:5px 12px;border-radius:var(--r);cursor:pointer}
+.btn-out:hover{background:rgba(255,255,255,.14);color:#fff}
+/* NAV */
+.nav{background:#fff;border-bottom:2px solid var(--border);display:flex;overflow-x:auto;padding:0 6px}
+.nbtn{font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:0 15px;height:43px;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;display:flex;align-items:center;gap:6px;transition:color .15s}
+.nbtn:hover{color:var(--text)}
+.nbtn.active{color:var(--navy);border-bottom-color:var(--navy);font-weight:600}
+.npip{width:6px;height:6px;border-radius:50%;background:var(--gold);display:none}
+.nbtn.active .npip{display:block}
+/* BODY */
+.body{background:var(--bg);padding:17px;border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;min-height:480px}
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:#fff;border:1px solid var(--border);border-radius:var(--rlg);padding:13px 15px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.kpi::after{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.kpi.cn::after{background:var(--navy)}.kpi.cg::after{background:#38a169}.kpi.cr::after{background:#e53e3e}.kpi.ca::after{background:#d69e2e}.kpi.cb::after{background:#3182ce}.kpi.cgo::after{background:var(--gold)}
+.kpi-l{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
+.kpi-v{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;line-height:1}
+.kpi-s{font-size:10px;color:var(--muted);margin-top:4px}
+/* CARD */
+.card{background:#fff;border:1px solid var(--border);border-radius:var(--rlg);margin-bottom:13px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.card-hd{padding:12px 17px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:#fafbfc}
+.card-hd h3{font-size:13px;font-weight:600;color:var(--navy)}
+.card-hd-r{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.toolbar{padding:9px 17px;border-bottom:1px solid var(--border);display:flex;gap:7px;flex-wrap:wrap;align-items:center;background:#fcfcfd}
+.toolbar input,.toolbar select{font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;color:var(--text);outline:none}
+.toolbar input{flex:1;min-width:130px}
+.toolbar input:focus,.toolbar select:focus{border-color:var(--navy)}
+/* BUTTONS */
+.btn{font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:5px 13px;border-radius:var(--r);cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--text);white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+.btn:hover{background:#f1f5f9}
+.btn-p{background:var(--navy);color:#fff;border-color:var(--navy)}.btn-p:hover{background:var(--navy2)}
+.btn-e{background:var(--navy2);color:#fff;border-color:var(--navy2);font-size:11px;padding:4px 11px}.btn-e:hover{background:var(--navy)}
+.btn-sm{font-size:11px;padding:3px 9px}
+.btn-g{background:none;border:none;padding:3px 6px;color:var(--muted);cursor:pointer;border-radius:4px;font-size:14px}.btn-g:hover{background:var(--bg);color:var(--text)}
+.btn-d{background:none;border:none;padding:3px 6px;color:#fc8181;cursor:pointer;border-radius:4px;font-size:14px}.btn-d:hover{background:var(--red-bg);color:var(--red)}
+/* TABLE */
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+th{text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;padding:8px 12px;border-bottom:1px solid var(--border);background:#fafbfc;white-space:nowrap}
+td{padding:8px 12px;border-bottom:1px solid #f0f2f5;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#f8fafc}
+.mono{font-family:'DM Mono',monospace;font-size:11px}
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.04em;white-space:nowrap;border:1px solid transparent}
+.b-lead{background:var(--blue-bg);color:var(--blue);border-color:#bee3f8}
+.b-quoted{background:var(--amber-bg);color:var(--amber);border-color:#fcd34d}
+.b-won{background:var(--green-bg);color:var(--green);border-color:#c6f6d5}
+.b-lost{background:var(--red-bg);color:var(--red);border-color:#fed7d7}
+.b-open{background:var(--blue-bg);color:var(--blue);border-color:#bee3f8}
+.b-prog{background:var(--amber-bg);color:var(--amber);border-color:#fcd34d}
+.b-done{background:var(--green-bg);color:var(--green);border-color:#c6f6d5}
+.b-inv{background:#f7fafc;color:#4a5568;border-color:#e2e8f0}
+.b-paid{background:var(--green-bg);color:var(--green);border-color:#c6f6d5}
+.b-out{background:var(--amber-bg);color:var(--amber);border-color:#fcd34d}
+.b-bu{background:var(--purple-bg);color:var(--purple);border-color:var(--purple-border);font-size:10px}
+.b-recv{background:var(--green-bg);color:var(--green);border-color:#c6f6d5}
+.b-pend{background:var(--amber-bg);color:var(--amber);border-color:#fcd34d}
+/* SLA */
+.sla-ok{color:#276749;font-weight:700;font-family:'DM Mono',monospace;font-size:11px}
+.sla-warn{color:#d97706;font-weight:700;font-family:'DM Mono',monospace;font-size:11px}
+.sla-late{color:#c53030;font-weight:700;font-family:'DM Mono',monospace;font-size:11px}
+.pp{color:#276749;font-weight:600;font-family:'DM Mono',monospace;font-size:11px}
+.pn{color:#c53030;font-weight:600;font-family:'DM Mono',monospace;font-size:11px}
+.ob{color:#c53030;font-weight:600}
+/* MODAL */
+.mov{position:fixed;inset:0;background:rgba(10,18,26,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
+.mbox{background:#fff;border-radius:12px;padding:22px;width:100%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:92vh;overflow-y:auto}
+.mtitle{font-size:14px;font-weight:600;color:var(--navy);margin-bottom:15px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.mfr{margin-bottom:11px}
+.mfr label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+.mfr input,.mfr select,.mfr textarea{width:100%;font-family:'DM Sans',sans-serif;font-size:12px;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--r);outline:none}
+.mfr input:focus,.mfr select:focus,.mfr textarea:focus{border-color:var(--navy)}
+.mfr textarea{height:52px;resize:vertical}
+.mfoot{display:flex;justify-content:flex-end;gap:7px;margin-top:17px;padding-top:13px;border-top:1px solid var(--border)}
+/* CONFIRM */
+.cov{position:fixed;inset:0;background:rgba(10,18,26,.6);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px}
+.cbox{background:#fff;border-radius:12px;padding:22px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.cbox h4{font-size:14px;font-weight:600;color:var(--navy);margin-bottom:7px}
+.cbox p{font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.6}
+.cbtns{display:flex;gap:7px;justify-content:flex-end}
+.btn-del{background:var(--red-bg);color:var(--red);border:1px solid #fed7d7}.btn-del:hover{background:#fed7d7}
+/* TOAST */
+#toast{position:fixed;bottom:18px;right:18px;padding:10px 16px;border-radius:8px;font-size:12px;font-weight:500;z-index:9999;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;transform:translateY(6px);box-shadow:0 4px 16px rgba(0,0,0,.15)}
+#toast.show{opacity:1;transform:translateY(0)}
+#toast.ts{background:#276749;color:#fff}
+#toast.te{background:#9b1c1c;color:#fff}
+#toast.ti{background:var(--navy);color:#fff}
+.empty{text-align:center;padding:32px;color:#a0aec0;font-size:12px}
+.alert-a{background:var(--amber-bg);border:1px solid #fcd34d;border-radius:var(--r);padding:10px 15px;margin-bottom:13px;display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap;font-size:12px;font-weight:500;color:var(--amber)}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="lcard">
+    <img class="llogo" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAARCAAoACgDASIAAhEBAxEB/8QAGgAAAgMBAQAAAAAAAAAAAAAAAAMBBAUCBv/EACkQAAIBBAEEAQQDAQAAAAAAAAECAAMRBBIhMUFRBSJhcROBkbHR/8QAGAEAAwEBAAAAAAAAAAAAAAAAAAECAwT/xAAhEQACAgICAgMAAAAAAAAAAAAAAQIREiExA0FRsf/aAAwDAQACEQMRAD8A7zRWK8bmpxr3YHWkxNw3PVUB3YkgCZ0eMYJCqSSdADzM/I+R+O47bQE3LrqPf1MfNWjXvgLCk7Gxv3qY2cqrHQXc23fME/bHLbLo4gg18AzHkyWEY5bKbMnXJQfGiGVsU0bixcJJJIHgSv1nksHHWx+bFuBUafmF0E1vff5mSi2V7s9L69CbDhPOuR3OFjV81/y+LNbqhHWrHRHpIHv5m3icZbl51bfVhbqKQdlve/B9j0mzgFuLYVLjBn3sgEbHoPExLALVJEL2P73Gl6QhO/UZHE4e5a4q1RDKG10knsB8dZ9LjNFkiDoCR9TbF57w+Tz0hTqbbGZfN2+TXNX62lNKCoBqRBQBc11ULG7jbv5X0/6Z5YmpVwTa/xL8ZRQAqgADoAJzQhCqC0Xt+TMlpJdFkH4Y//2Q==" alt="MM">
+    <div class="lco">Mine Minerals Supplies & Services</div>
+    <div class="ltag">Operations Platform</div>
+    <div class="ldiv"></div>
+    <div class="lform-title">Sign in to your account</div>
+    <div class="fr"><label>Username</label><input type="text" id="lu" placeholder="Enter username" autocomplete="username"></div>
+    <div class="fr"><label>Password</label><input type="password" id="lp" placeholder="Enter password" autocomplete="current-password"></div>
+    <button class="lbtn" onclick="doLogin()">Sign in</button>
+    <div class="lerr" id="lerr">Incorrect username or password.</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+<div class="wrap">
+  <div class="hdr">
+    <div class="hdr-brand">
+      <img class="hdr-logo" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAARCAAoACgDASIAAhEBAxEB/8QAGgAAAgMBAQAAAAAAAAAAAAAAAAMBBAUCBv/EACkQAAIBBAEEAQQDAQAAAAAAAAECAAMRBBIhMUFRBSJhcROBkbHR/8QAGAEAAwEBAAAAAAAAAAAAAAAAAAECAwT/xAAhEQACAgICAgMAAAAAAAAAAAAAAQIREiExA0FRsf/aAAwDAQACEQMRAD8A7zRWK8bmpxr3YHWkxNw3PVUB3YkgCZ0eMYJCqSSdADzM/I+R+O47bQE3LrqPf1MfNWjXvgLCk7Gxv3qY2cqrHQXc23fME/bHLbLo4gg18AzHkyWEY5bKbMnXJQfGiGVsU0bixcJJJIHgSv1nksHHWx+bFuBUafmF0E1vff5mSi2V7s9L69CbDhPOuR3OFjV81/y+LNbqhHWrHRHpIHv5m3icZbl51bfVhbqKQdlve/B9j0mzgFuLYVLjBn3sgEbHoPExLALVJEL2P73Gl6QhO/UZHE4e5a4q1RDKG10knsB8dZ9LjNFkiDoCR9TbF57w+Tz0hTqbbGZfN2+TXNX62lNKCoBqRBQBc11ULG7jbv5X0/6Z5YmpVwTa/xL8ZRQAqgADoAJzQhCqC0Xt+TMlpJdFkH4Y//2Q==" alt="MM">
+      <div><div class="hdr-name">Mine Minerals Supplies & Services</div><div class="hdr-sub">Rustenburg · 066 212 2225 · info@mineminerals.co.za</div></div>
+    </div>
+    <div class="hdr-mid"><span class="hdr-tag">Operations Platform</span><span class="hdr-date" id="hdate"></span></div>
+    <div class="hdr-right">
+      <div class="sync-wrap"><div class="sdot" id="sdot"></div><span class="slbl" id="slbl">Ready</span></div>
+      <div><div class="hdr-uname" id="uname">—</div><div class="hdr-urole" id="urole">—</div></div>
+      <button class="btn-out" onclick="logout()">Sign out</button>
+    </div>
+  </div>
+  <div class="nav" id="nav">
+    <button class="nbtn active" onclick="go('dash',this)"><span class="npip"></span>Dashboard</button>
+    <button class="nbtn" onclick="go('leads',this)"><span class="npip"></span>New Business</button>
+    <button class="nbtn" onclick="go('orders',this)"><span class="npip"></span>Order Book</button>
+    <button class="nbtn" onclick="go('buyer',this)"><span class="npip"></span>Buyer Sheet</button>
+    <button class="nbtn" onclick="go('jc',this)"><span class="npip"></span>Job Cards</button>
+    <button class="nbtn" onclick="go('fin',this)"><span class="npip"></span>Finance</button>
+  </div>
+  <div class="body" id="body"><div class="empty">Loading…</div></div>
+</div>
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────
+const SB  = (window.location.hostname==='localhost'||window.location.protocol==='file:') ? 'https://egcmleyqbtjdwuspgbsi.supabase.co' : '';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnY21sZXlxYnRqZHd1c3BnYnNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwOTQ3MDgsImV4cCI6MjA5NDY3MDcwOH0.Bc43J1OzmTKaVNCdKT1bXvIfak1jcxmCqVuyJKZINfw';
+const HDR = {'apikey':KEY,'Authorization':'Bearer '+KEY};
+const WHDР = {'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'};
+const BUS = ['Fabrication','Construction','Pumps','TMM','Motors','Wear Protection','Mining Supplies','Laser Cutting'];
+const USERS = [
+  {u:'martin',  p:'MM@Admin2026', name:'Martin Spies',       role:'CEO'},
+  {u:'estimator',p:'MM@Est2026',  name:'Estimator',          role:'Estimator'},
+  {u:'sales',   p:'MM@Sales2026', name:'Internal Sales',     role:'Sales'},
+  {u:'ops',     p:'MM@Ops2026',   name:'Operations Manager', role:'Operations'},
+  {u:'finance', p:'MM@Fin2026',   name:'Finance',            role:'Finance'},
+  {u:'buyer',   p:'MM@Buy2026',   name:'Buyer',              role:'Buyer'},
+];
+
+// ── STATE ────────────────────────────────────────────
+let leads=[],orders=[],spos=[],jcs=[],invs=[];
+let cUser=null, curTab='dash';
+
+// ── DB ───────────────────────────────────────────────
+async function GET(t,q=''){
+  const qs = q ? q+'&order=created_at.desc' : 'order=created_at.desc';
+  const base = SB ? SB+'/rest/v1/' : '/api/rest/v1/';
+  const r=await fetch(base+t+'?'+qs,{headers:HDR});
+  if(!r.ok){console.error('GET',t,r.status,await r.text());return [];}
+  return r.json();
+}
+async function POST(t,b){
+  const base = SB ? SB+'/rest/v1/' : '/api/rest/v1/';
+  const r=await fetch(base+t,{method:'POST',headers:WHDР,body:JSON.stringify(b)});
+  if(!r.ok){const e=await r.json();throw new Error(e.message||'Error');}
+  return r.json();
+}
+async function PATCH(t,q,b){
+  const base = SB ? SB+'/rest/v1/' : '/api/rest/v1/';
+  const r=await fetch(base+t+'?'+q,{method:'PATCH',headers:WHDР,body:JSON.stringify(b)});
+  if(!r.ok){const e=await r.json();throw new Error(e.message||'Error');}
+  return r.json();
+}
+async function DEL(t,q){
+  const base = SB ? SB+'/rest/v1/' : '/api/rest/v1/';
+  await fetch(base+t+'?'+q,{method:'DELETE',headers:WHDР});
+}
+
+async function load(){
+  sync(true,'Loading…');
+  try{
+    leads  = await GET('leads');
+    orders = await GET('orders');
+    spos   = await GET('supplier_pos');
+    jcs    = await GET('job_cards');
+    invs   = await GET('invoices');
+    console.log('Loaded:',leads.length,'leads',orders.length,'orders');
+    sync(false,'Live ✓');
+  }catch(e){console.error('Load error:',e);sync(false,'Error',true);toast('Load failed: '+e.message,'e');}
+}
+
+// ── AUTH ─────────────────────────────────────────────
+function doLogin(){
+  const u=document.getElementById('lu').value.trim().toLowerCase();
+  const p=document.getElementById('lp').value;
+  const m=USERS.find(x=>x.u===u&&x.p===p);
+  if(!m){document.getElementById('lerr').style.display='block';return;}
+  cUser=m;sessionStorage.setItem('mm',JSON.stringify(m));launch();
+}
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('login').style.display!=='none')doLogin();});
+function logout(){sessionStorage.removeItem('mm');cUser=null;document.getElementById('app').style.display='none';document.getElementById('login').style.display='flex';document.getElementById('lp').value='';document.getElementById('lerr').style.display='none';}
+function launch(){
+  document.getElementById('login').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('hdate').textContent=new Date().toLocaleDateString('en-ZA',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+  document.getElementById('uname').textContent=cUser.name;
+  document.getElementById('urole').textContent=cUser.role;
+  load().then(()=>go('dash',document.querySelector('.nbtn')));
+}
+
+// ── UI HELPERS ───────────────────────────────────────
+const R=v=>'R\u202f'+(Math.round(v||0)).toLocaleString('en-ZA');
+const td=()=>new Date().toISOString().split('T')[0];
+const dd=d=>Math.round((new Date(d)-new Date(td()))/86400000);
+const fd=d=>d?String(d).split('-').reverse().join('/'):'—';
+const gv=id=>{const e=document.getElementById(id);return e?e.value:'';}
+const fmtDate=v=>{if(!v)return null;try{const d=new Date(v);if(isNaN(d))return null;return d.toISOString().split('T')[0];}catch(e){return null;}};
+const buO=s=>BUS.map(b=>`<option${b===s?' selected':''}>${b}</option>`).join('');
+const buS=(id,s)=>`<select id="${id}">${buO(s)}</select>`;
+
+function sla(due,status){
+  if(!due||['Completed','Won','Lost'].includes(status))return '';
+  const d=dd(due);
+  if(d<0)return `<span class="sla-late">${Math.abs(d)}d late</span>`;
+  if(d===0)return `<span class="sla-warn">Today</span>`;
+  return `<span class="sla-ok">${d}d left</span>`;
+}
+const lbadge=s=>({Lead:'b-lead',Quoted:'b-quoted',Won:'b-won',Lost:'b-lost'}[s]||'b-lead');
+const obadge=s=>({Open:'b-open','In progress':'b-prog',Completed:'b-done'}[s]||'b-open');
+
+let _tt;
+function toast(msg,type='i'){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='show t'+type;
+  clearTimeout(_tt);_tt=setTimeout(()=>t.className='',3000);
+}
+function sync(on,lbl,err=false){
+  const d=document.getElementById('sdot'),l=document.getElementById('slbl');
+  if(!d)return;
+  d.className='sdot'+(on?' syncing':err?' err':'');
+  l.textContent=lbl;
+}
+
+function openM(html){closeM();const e=document.createElement('div');e.className='mov';e.id='mov';e.innerHTML=`<div class="mbox">${html}</div>`;e.onclick=ev=>{if(ev.target===e)closeM();};document.body.appendChild(e);}
+function closeM(){const e=document.getElementById('mov');if(e)e.remove();}
+function cfm(title,msg,cb){
+  const e=document.createElement('div');e.className='cov';e.id='cov';
+  e.innerHTML=`<div class="cbox"><h4>${title}</h4><p>${msg}</p><div class="cbtns"><button class="btn" onclick="document.getElementById('cov').remove()">Cancel</button><button class="btn btn-del" id="cyes">Delete</button></div></div>`;
+  document.body.appendChild(e);
+  document.getElementById('cyes').onclick=()=>{e.remove();cb();};
+}
+
+// ── TABS ─────────────────────────────────────────────
+function go(tab,btn){
+  document.querySelectorAll('.nbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');curTab=tab;
+  const renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,jc:rJC,fin:rFin};
+  document.getElementById('body').innerHTML=renders[tab]?renders[tab]():'';
+  if(tab==='leads')setTimeout(fLeads,0);
+  if(tab==='orders')setTimeout(fOrders,0);
+  if(tab==='jc')setTimeout(fJCs,0);
+}
+
+// ── EXCEL EXPORT ─────────────────────────────────────
+function xlx(data,cols,file,sheet){
+  const ws=XLSX.utils.aoa_to_sheet([cols.map(c=>c.l),...data.map(r=>cols.map(c=>r[c.k]??''))]);
+  ws['!cols']=cols.map(c=>({wch:c.w||14}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,sheet);
+  XLSX.writeFile(wb,file);toast('Excel exported','s');
+}
+
+// ── DASHBOARD ────────────────────────────────────────
+function rDash(){
+  const pipe=leads.filter(l=>['Lead','Quoted'].includes(l.status)).reduce((s,l)=>s+(+l.quote_val||0),0);
+  const won=leads.filter(l=>l.status==='Won').reduce((s,l)=>s+(+l.quote_val||0),0);
+  const openV=orders.filter(o=>!o.invoiced).reduce((s,o)=>s+(+o.order_val||0),0);
+  const lateO=orders.filter(o=>!o.invoiced&&o.due<td()).length;
+  const lateQ=leads.filter(l=>l.status==='Lead'&&l.quote_due<td()).length;
+  const invT=invs.reduce((s,i)=>s+(+i.order_val||0),0);
+  const prof=invs.reduce((s,i)=>s+(+i.order_val||0)-(+i.mat_cost||0)-(+i.labour_cost||0)-(+i.overheads||0),0);
+  const mg=invT>0?Math.round(prof/invT*100):0;
+  const buR=BUS.map(bu=>{
+    const v=orders.filter(o=>o.bu===bu&&!o.invoiced).reduce((s,o)=>s+(+o.order_val||0),0);
+    const n=orders.filter(o=>o.bu===bu&&!o.invoiced).length;
+    const ov=orders.filter(o=>o.bu===bu&&!o.invoiced&&o.due<td()).length;
+    return v>0?`<tr><td style="font-weight:500">${bu}</td><td class="mono">${R(v)}</td><td style="text-align:center">${n}</td><td>${ov>0?`<span style="color:#c53030;font-weight:600;font-size:11px">⚠ ${ov} overdue</span>`:'<span style="color:#276749;font-weight:600;font-size:11px">✓ On track</span>'}</td></tr>`:''}).join('');
+  return `<div class="kpis">
+    <div class="kpi cgo"><div class="kpi-l">Pipeline value</div><div class="kpi-v">${R(pipe)}</div><div class="kpi-s">${leads.filter(l=>['Lead','Quoted'].includes(l.status)).length} active leads</div></div>
+    <div class="kpi cg"><div class="kpi-l">Quotes won</div><div class="kpi-v">${R(won)}</div><div class="kpi-s">${leads.filter(l=>l.status==='Won').length} jobs</div></div>
+    <div class="kpi cb"><div class="kpi-l">Open order book</div><div class="kpi-v">${R(openV)}</div><div class="kpi-s">${orders.filter(o=>!o.invoiced).length} open</div></div>
+    <div class="kpi ${lateO>0?'cr':'cg'}"><div class="kpi-l">Overdue orders</div><div class="kpi-v">${lateO}</div><div class="kpi-s">Past due date</div></div>
+    <div class="kpi ${lateQ>0?'ca':'cg'}"><div class="kpi-l">Overdue quotes</div><div class="kpi-v">${lateQ}</div><div class="kpi-s">3-day SLA</div></div>
+    <div class="kpi ${mg>15?'cg':mg>0?'ca':'cr'}"><div class="kpi-l">Gross margin</div><div class="kpi-v">${mg}%</div><div class="kpi-s">Invoiced work</div></div>
+  </div>
+  <div class="card"><div class="card-hd"><h3>Order book by business unit</h3><button class="btn btn-sm" onclick="load().then(()=>go('dash',document.querySelector('.nbtn')))">↻ Refresh</button></div>
+  <div class="tw"><table><thead><tr><th>Business unit</th><th>Open value</th><th style="text-align:center">Orders</th><th>Health</th></tr></thead>
+  <tbody>${buR||'<tr><td colspan="4" class="empty">No open orders</td></tr>'}</tbody></table></div></div>
+  <div class="card"><div class="card-hd"><h3>Live order feed</h3></div>
+  <div class="tw"><table><thead><tr><th style="width:78px">Job #</th><th style="width:130px">Client</th><th style="width:108px">Business unit</th><th style="width:88px">Value</th><th style="width:78px">Due</th><th style="width:68px">SLA</th><th>Status</th></tr></thead>
+  <tbody>${orders.filter(o=>!o.invoiced).map(o=>`<tr><td class="mono">${o.ref}</td><td>${o.client}</td><td><span class="badge b-bu">${o.bu}</span></td><td class="mono">${R(+o.order_val)}</td><td class="mono" style="font-size:11px">${fd(o.due)}</td><td>${sla(o.due,o.status)}</td><td><span class="badge ${obadge(o.status)}">${o.status}</span></td></tr>`).join('')||'<tr><td colspan="7" class="empty">No open orders</td></tr>'}
+  </tbody></table></div></div>`;
+}
+
+// ── NEW BUSINESS ─────────────────────────────────────
+function rLeads(){
+  const lQ=leads.filter(l=>l.status==='Lead'&&l.quote_due<td()).length;
+  return `<div class="kpis">
+    <div class="kpi cn"><div class="kpi-l">Total leads</div><div class="kpi-v">${leads.length}</div></div>
+    <div class="kpi ${lQ>0?'cr':'cg'}"><div class="kpi-l">Overdue quotes</div><div class="kpi-v">${lQ}</div><div class="kpi-s">3-day SLA</div></div>
+    <div class="kpi cg"><div class="kpi-l">Won</div><div class="kpi-v">${leads.filter(l=>l.status==='Won').length}</div></div>
+    <div class="kpi cr"><div class="kpi-l">Lost</div><div class="kpi-v">${leads.filter(l=>l.status==='Lost').length}</div></div>
+    <div class="kpi cgo"><div class="kpi-l">Pipeline value</div><div class="kpi-v">${R(leads.filter(l=>l.status==='Quoted').reduce((s,l)=>s+(+l.quote_val||0),0))}</div></div>
+  </div>
+  <div class="card"><div class="card-hd"><h3>Leads & quotes register</h3>
+    <div class="card-hd-r"><button class="btn btn-p btn-sm" onclick="oLead(null)">+ Add lead</button><button class="btn btn-e" onclick="expLeads()">↓ Excel</button></div></div>
+  <div class="toolbar"><input type="text" id="ls" placeholder="Search…" oninput="fLeads()">
+    <select id="lbu" onchange="fLeads()"><option value="">All BUs</option>${BUS.map(b=>`<option>${b}</option>`).join('')}</select>
+    <select id="lst" onchange="fLeads()"><option value="">All statuses</option><option>Lead</option><option>Quoted</option><option>Won</option><option>Lost</option></select></div>
+  <div class="tw"><table><thead><tr><th style="width:100px">Ref</th><th style="width:125px">Client</th><th style="width:103px">BU</th><th style="width:88px">Type</th><th style="width:76px">Quote due</th><th style="width:60px">SLA</th><th style="width:80px">Value</th><th style="width:70px">Status</th><th style="width:62px">Actions</th></tr></thead>
+  <tbody id="ltb"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody></table></div></div>`;
+}
+function fLeads(){
+  const s=(document.getElementById('ls')||{}).value?.toLowerCase()||'';
+  const bu=gv('lbu'),st=gv('lst');
+  const f=leads.filter(l=>(l.client+l.ref+l.type+l.bu).toLowerCase().includes(s)&&(!bu||l.bu===bu)&&(!st||l.status===st));
+  const tb=document.getElementById('ltb');if(!tb)return;
+  tb.innerHTML=f.length?f.map(l=>`<tr><td class="mono">${l.ref}</td><td title="${l.client}">${l.client}</td><td><span class="badge b-bu">${l.bu}</span></td><td style="font-size:11px">${l.type}</td><td class="mono" style="font-size:11px">${fd(l.quote_due)}</td><td>${sla(l.quote_due,l.status)}</td><td class="mono">${+l.quote_val>0?R(+l.quote_val):'TBD'}</td><td><span class="badge ${lbadge(l.status)}">${l.status}</span></td><td><button class="btn-g" onclick="oLead('${l.id}')">✎</button><button class="btn-d" onclick="dLead('${l.id}')">✕</button></td></tr>`).join(''):'<tr><td colspan="9" class="empty">No records match</td></tr>';
+}
+function oLead(id){
+  const l=id?leads.find(x=>x.id===id):{};
+  const nr='LB-'+new Date().getFullYear()+'-'+String(leads.length+1).padStart(3,'0');
+  openM(`<div class="mtitle">${id?'Edit lead':'New lead'}</div>
+    <div class="f2"><div class="mfr"><label>Lead ref</label><input id="mLr" value="${l.ref||nr}"></div><div class="mfr"><label>Business unit</label>${buS('mLb',l.bu)}</div></div>
+    <div class="mfr"><label>Client name</label><input id="mLc" value="${l.client||''}"></div>
+    <div class="f2"><div class="mfr"><label>Work type</label><input id="mLt" value="${l.type||''}"></div><div class="mfr"><label>Contact</label><input id="mLct" value="${l.contact||''}"></div></div>
+    <div class="f2"><div class="mfr"><label>Date received</label><input type="date" id="mLrec" value="${l.received||td()}"></div><div class="mfr"><label>Quote due (3-day SLA)</label><input type="date" id="mLd" value="${l.quote_due||''}"></div></div>
+    <div class="f2"><div class="mfr"><label>Status</label><select id="mLs">${['Lead','Quoted','Won','Lost'].map(s=>`<option${l.status===s?' selected':''}>${s}</option>`).join('')}</select></div><div class="mfr"><label>Quote value (R)</label><input type="number" id="mLv" value="${l.quote_val||0}"></div></div>
+    <div class="mfr"><label>Notes</label><textarea id="mLn">${l.notes||''}</textarea></div>
+    <div class="mfoot"><button class="btn" onclick="closeM()">Cancel</button><button class="btn btn-p" onclick="sLead('${id||''}')">Save lead</button></div>`);
+}
+async function sLead(id){
+  const b={ref:gv('mLr'),client:gv('mLc'),bu:gv('mLb'),type:gv('mLt'),contact:gv('mLct'),received:fmtDate(gv('mLrec')),quote_due:fmtDate(gv('mLd')),status:gv('mLs'),quote_val:+gv('mLv')||0,notes:gv('mLn')};
+  try{id?await PATCH('leads','id=eq.'+id,b):await POST('leads',b);closeM();await load();fLeads();toast('Lead saved','s');}catch(e){toast(e.message,'e');}
+}
+function dLead(id){cfm('Delete lead','Permanently delete this lead?',async()=>{await DEL('leads','id=eq.'+id);await load();fLeads();toast('Deleted','s');});}
+function expLeads(){
+  const f=leads.filter(l=>(!gv('lbu')||l.bu===gv('lbu'))&&(!gv('lst')||l.status===gv('lst')));
+  xlx(f.map(l=>({a:l.ref,b:l.client,c:l.bu,d:l.type,e:l.contact,f:fd(l.received),g:fd(l.quote_due),h:l.status,i:+l.quote_val||0,j:l.notes})),[{k:'a',l:'Ref',w:14},{k:'b',l:'Client',w:22},{k:'c',l:'BU',w:18},{k:'d',l:'Type',w:16},{k:'e',l:'Contact',w:18},{k:'f',l:'Received',w:13},{k:'g',l:'Quote Due',w:12},{k:'h',l:'Status',w:10},{k:'i',l:'Quote Value',w:14},{k:'j',l:'Notes',w:30}],'MM_Leads.xlsx','New Business');
+}
+
+// ── ORDER BOOK ───────────────────────────────────────
+function rOrders(){
+  const openV=orders.filter(o=>!o.invoiced).reduce((s,o)=>s+(+o.order_val||0),0);
+  const late=orders.filter(o=>!o.invoiced&&o.due<td()).length;
+  return `<div class="kpis">
+    <div class="kpi cn"><div class="kpi-l">Open orders</div><div class="kpi-v">${orders.filter(o=>!o.invoiced).length}</div></div>
+    <div class="kpi cgo"><div class="kpi-l">Order book value</div><div class="kpi-v">${R(openV)}</div></div>
+    <div class="kpi ${late>0?'cr':'cg'}"><div class="kpi-l">Overdue</div><div class="kpi-v">${late}</div><div class="kpi-s">Past due date</div></div>
+    <div class="kpi cg"><div class="kpi-l">Completed</div><div class="kpi-v">${orders.filter(o=>o.status==='Completed').length}</div></div>
+  </div>
+  <div class="card"><div class="card-hd"><h3>Order book register</h3>
+    <div class="card-hd-r"><button class="btn btn-p btn-sm" onclick="oOrder(null)">+ Add order</button><button class="btn btn-e" onclick="expOrders()">↓ Excel</button></div></div>
+  <div class="toolbar"><input type="text" id="os" placeholder="Search…" oninput="fOrders()">
+    <select id="obu" onchange="fOrders()"><option value="">All BUs</option>${BUS.map(b=>`<option>${b}</option>`).join('')}</select>
+    <select id="ost" onchange="fOrders()"><option value="">All statuses</option><option>Open</option><option>In progress</option><option>Completed</option></select></div>
+  <div class="tw"><table><thead><tr><th style="width:78px">Job #</th><th style="width:125px">Client</th><th style="width:105px">BU</th><th style="width:85px">Value</th><th style="width:76px">Due</th><th style="width:63px">SLA</th><th style="width:36px">JCs</th><th style="width:78px">Status</th><th style="width:92px">Actions</th></tr></thead>
+  <tbody id="otb"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody></table></div></div>`;
+}
+function fOrders(){
+  const s=(document.getElementById('os')||{}).value?.toLowerCase()||'';
+  const bu=gv('obu'),st=gv('ost');
+  const f=orders.filter(o=>(o.client+o.ref+o.bu).toLowerCase().includes(s)&&(!bu||o.bu===bu)&&(!st||o.status===st));
+  const tb=document.getElementById('otb');if(!tb)return;
+  tb.innerHTML=f.length?f.map(o=>{
+    const slaTd=o.invoiced?'<span class="badge b-inv">Invoiced</span>':sla(o.due,o.status);
+    const mv=o.status==='Completed'&&!o.invoiced?`<button class="btn btn-sm" onclick="mov2inv('${o.id}')" style="font-size:10px">→Inv</button> `:'';
+    return `<tr><td class="mono">${o.ref}</td><td title="${o.client}">${o.client}</td><td><span class="badge b-bu">${o.bu}</span></td><td class="mono">${R(+o.order_val)}</td><td class="mono" style="font-size:11px">${fd(o.due)}</td><td>${slaTd}</td><td style="text-align:center">${o.job_cards||0}</td><td><span class="badge ${obadge(o.status)}">${o.status}</span></td><td>${mv}<button class="btn-g" onclick="oOrder('${o.id}')">✎</button><button class="btn-d" onclick="dOrder('${o.id}')">✕</button></td></tr>`;
+  }).join(''):'<tr><td colspan="9" class="empty">No records match</td></tr>';
+}
+function oOrder(id){
+  const o=id?orders.find(x=>x.id===id):{};
+  const nr='MM'+String(orders.length+1).padStart(3,'0');
+  openM(`<div class="mtitle">${id?'Edit order':'New order'}</div>
+    <div class="f2"><div class="mfr"><label>Job number</label><input id="mOr" value="${o.ref||nr}"></div><div class="mfr"><label>Business unit</label>${buS('mOb',o.bu)}</div></div>
+    <div class="f2"><div class="mfr"><label>Client</label><input id="mOc" value="${o.client||''}"></div><div class="mfr"><label>Work type</label><input id="mOt" value="${o.type||''}"></div></div>
+    <div class="f2"><div class="mfr"><label>Order value (R)</label><input type="number" id="mOv" value="${o.order_val||0}"></div><div class="mfr"><label>Status</label><select id="mOs">${['Open','In progress','Completed'].map(s=>`<option${o.status===s?' selected':''}>${s}</option>`).join('')}</select></div></div>
+    <div class="f2"><div class="mfr"><label>Date received</label><input type="date" id="mOrec" value="${o.received||td()}"></div><div class="mfr"><label>Due date</label><input type="date" id="mOd" value="${o.due||''}"></div></div>
+    <div class="mfr"><label>Notes</label><textarea id="mOn">${o.notes||''}</textarea></div>
+    <div class="mfoot"><button class="btn" onclick="closeM()">Cancel</button><button class="btn btn-p" onclick="sOrder('${id||''}')">Save order</button></div>`);
+}
+async function sOrder(id){
+  const b={ref:gv('mOr'),client:gv('mOc'),bu:gv('mOb'),type:gv('mOt'),order_val:+gv('mOv')||0,received:fmtDate(gv('mOrec')),due:fmtDate(gv('mOd')),status:gv('mOs'),job_cards:id?orders.find(o=>o.id===id)?.job_cards||0:0,invoiced:false,notes:gv('mOn')};
+  try{id?await PATCH('orders','id=eq.'+id,b):await POST('orders',b);closeM();await load();fOrders();toast('Order saved','s');}catch(e){toast(e.message,'e');}
+}
+function dOrder(id){cfm('Delete order','Permanently delete this order?',async()=>{await DEL('orders','id=eq.'+id);await load();fOrders();toast('Deleted','s');});}
+async function mov2inv(id){
+  const o=orders.find(x=>x.id===id);if(!o)return;
+  const j=jcs.filter(x=>x.job_ref===o.ref);
+  const mat=j.reduce((s,x)=>s+(+x.mat_actual||0),0);
+  const hrs=j.reduce((s,x)=>s+(+x.actual_hrs||0),0);
+  const inv={inv_ref:'INV-'+new Date().getFullYear()+'-'+String(invs.length+1).padStart(3,'0'),job_ref:o.ref,client:o.client,bu:o.bu,order_val:+o.order_val||0,mat_cost:mat||Math.round((+o.order_val||0)*.35),labour_cost:Math.round(hrs*350)||Math.round((+o.order_val||0)*.15),overheads:Math.round((+o.order_val||0)*.08),invoiced_date:td(),status:'Outstanding'};
+  try{await POST('invoices',inv);await PATCH('orders','id=eq.'+id,{invoiced:true});await load();fOrders();toast(o.ref+' moved to Finance','s');}catch(e){toast(e.message,'e');}
+}
+function expOrders(){
+  const f=orders.filter(o=>(!gv('obu')||o.bu===gv('obu'))&&(!gv('ost')||o.status===gv('ost')));
+  xlx(f.map(o=>({a:o.ref,b:o.client,c:o.bu,d:o.type,e:+o.order_val||0,f:fd(o.received),g:fd(o.due),h:o.status,i:o.invoiced?'Yes':'No',j:o.notes})),[{k:'a',l:'Job #',w:10},{k:'b',l:'Client',w:22},{k:'c',l:'BU',w:18},{k:'d',l:'Type',w:16},{k:'e',l:'Value',w:14},{k:'f',l:'Received',w:13},{k:'g',l:'Due',w:12},{k:'h',l:'Status',w:12},{k:'i',l:'Invoiced',w:9},{k:'j',l:'Notes',w:30}],'MM_Orders.xlsx','Order Book');
+}
+
+// ── BUYER SHEET ──────────────────────────────────────
+function rBuyer(){
+  const tot=spos.reduce((s,p)=>s+(+p.amount||0),0);
+  const pend=spos.filter(p=>!p.received).reduce((s,p)=>s+(+p.amount||0),0);
+  return `<div class="kpis">
+    <div class="kpi cn"><div class="kpi-l">Supplier POs</div><div class="kpi-v">${spos.length}</div></div>
+    <div class="kpi cgo"><div class="kpi-l">Total committed</div><div class="kpi-v">${R(tot)}</div></div>
+    <div class="kpi ca"><div class="kpi-l">Pending delivery</div><div class="kpi-v">${spos.filter(p=>!p.received).length}</div><div class="kpi-s">${R(pend)}</div></div>
+    <div class="kpi cg"><div class="kpi-l">Received</div><div class="kpi-v">${spos.filter(p=>p.received).length}</div></div>
+  </div>
+  <div class="card"><div class="card-hd"><h3>Supplier purchase orders</h3>
+    <div class="card-hd-r"><button class="btn btn-p btn-sm" onclick="oSPO()">+ Add supplier PO</button>
+    <select id="bbu" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none" onchange="fSPOs()"><option value="">All BUs</option>${BUS.map(b=>`<option>${b}</option>`).join('')}</select>
+    <button class="btn btn-e" onclick="expBuyer()">↓ Excel</button></div></div>
+  <div class="tw"><table><thead><tr><th style="width:88px">SPO ref</th><th style="width:70px">Job #</th><th style="width:105px">BU</th><th style="width:115px">Supplier</th><th>Description</th><th style="width:80px">Amount</th><th style="width:86px">Ordered</th><th style="width:80px">Status</th><th style="width:62px">Actions</th></tr></thead>
+  <tbody id="btb">${rSPOrows()}</tbody></table></div></div>`;
+}
+function rSPOrows(){
+  const bu=gv('bbu');
+  const f=spos.filter(p=>!bu||p.bu===bu);
+  return f.length?f.map(p=>`<tr><td class="mono">${p.spref}</td><td class="mono">${p.job_ref}</td><td><span class="badge b-bu">${p.bu}</span></td><td style="font-size:11px">${p.supplier}</td><td style="white-space:normal;font-size:11px;line-height:1.4">${p.description}</td><td class="mono">${R(+p.amount)}</td><td class="mono" style="font-size:11px">${fd(p.ordered)}</td><td><span class="badge ${p.received?'b-recv':'b-pend'}">${p.received?'Received':'Pending'}</span></td><td><button class="btn-g" onclick="togSPO('${p.id}',${p.received})" title="${p.received?'Mark pending':'Mark received'}">${p.received?'↩':'✓'}</button><button class="btn-d" onclick="dSPO('${p.id}')">✕</button></td></tr>`).join(''):'<tr><td colspan="9" class="empty">No supplier POs</td></tr>';
+}
+function fSPOs(){const tb=document.getElementById('btb');if(tb)tb.innerHTML=rSPOrows();}
+function oSPO(){
+  const nr='SPO-'+String(spos.length+1).padStart(3,'0');
+  openM(`<div class="mtitle">New supplier PO</div>
+    <div class="f2"><div class="mfr"><label>SPO ref</label><input id="mSr" value="${nr}"></div><div class="mfr"><label>Job number</label><input id="mSj"></div></div>
+    <div class="f2"><div class="mfr"><label>Business unit</label>${buS('mSb','')}</div><div class="mfr"><label>Supplier</label><input id="mSs"></div></div>
+    <div class="mfr"><label>Description</label><textarea id="mSd"></textarea></div>
+    <div class="f2"><div class="mfr"><label>Amount (R)</label><input type="number" id="mSa" value="0"></div><div class="mfr"><label>Date ordered</label><input type="date" id="mSdt" value="${td()}"></div></div>
+    <div class="mfoot"><button class="btn" onclick="closeM()">Cancel</button><button class="btn btn-p" onclick="sSPO()">Save PO</button></div>`);
+}
+async function sSPO(){
+  try{await POST('supplier_pos',{spref:gv('mSr'),job_ref:gv('mSj'),bu:gv('mSb'),supplier:gv('mSs'),description:gv('mSd'),amount:+gv('mSa')||0,ordered:fmtDate(gv('mSdt')),received:false});closeM();await load();document.getElementById('body').innerHTML=rBuyer();toast('PO saved','s');}catch(e){toast(e.message,'e');}
+}
+async function togSPO(id,cur){
+  try{await PATCH('supplier_pos','id=eq.'+id,{received:!cur});await load();document.getElementById('body').innerHTML=rBuyer();toast('Updated','s');}catch(e){toast(e.message,'e');}
+}
+function dSPO(id){cfm('Delete supplier PO','Permanently delete?',async()=>{await DEL('supplier_pos','id=eq.'+id);await load();document.getElementById('body').innerHTML=rBuyer();toast('Deleted','s');});}
+function expBuyer(){
+  const bu=gv('bbu');const f=spos.filter(p=>!bu||p.bu===bu);
+  xlx(f.map(p=>({a:p.spref,b:p.job_ref,c:p.bu,d:p.supplier,e:p.description,f:+p.amount||0,g:fd(p.ordered),h:p.received?'Received':'Pending'})),[{k:'a',l:'SPO Ref',w:12},{k:'b',l:'Job #',w:10},{k:'c',l:'BU',w:18},{k:'d',l:'Supplier',w:22},{k:'e',l:'Description',w:30},{k:'f',l:'Amount',w:14},{k:'g',l:'Ordered',w:13},{k:'h',l:'Status',w:12}],'MM_Buyer.xlsx','Supplier POs');
+}
+
+// ── JOB CARDS ────────────────────────────────────────
+function rJC(){
+  const over=jcs.filter(j=>(+j.actual_hrs||0)>(+j.budget_hrs||0)||(+j.mat_actual||0)>(+j.mat_budget||0)).length;
+  const totB=jcs.reduce((s,j)=>s+(+j.budget_hrs||0),0),totA=jcs.reduce((s,j)=>s+(+j.actual_hrs||0),0);
+  return `<div class="kpis">
+    <div class="kpi cn"><div class="kpi-l">Total job cards</div><div class="kpi-v">${jcs.length}</div></div>
+    <div class="kpi ${over>0?'cr':'cg'}"><div class="kpi-l">Over budget</div><div class="kpi-v">${over}</div><div class="kpi-s">Hours or material</div></div>
+    <div class="kpi cb"><div class="kpi-l">Budget hours</div><div class="kpi-v">${totB}</div></div>
+    <div class="kpi ${totA>totB?'cr':'cg'}"><div class="kpi-l">Actual hours</div><div class="kpi-v">${totA}</div><div class="kpi-s">${totA>totB?'+'+(totA-totB)+' over':(totB-totA)+' left'}</div></div>
+  </div>
+  <div class="card"><div class="card-hd"><h3>Job card register</h3>
+    <div class="card-hd-r"><button class="btn btn-p btn-sm" onclick="oJC()">+ Add job card</button>
+    <select id="jbu" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none" onchange="fJCs()"><option value="">All BUs</option>${BUS.map(b=>`<option>${b}</option>`).join('')}</select>
+    <select id="jst" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none" onchange="fJCs()"><option value="">All statuses</option><option>Open</option><option>In progress</option><option>Completed</option></select>
+    <button class="btn btn-e" onclick="expJC()">↓ Excel</button></div></div>
+  <div class="tw"><table><thead><tr><th style="width:86px">JC ref</th><th style="width:68px">Job #</th><th style="width:103px">BU</th><th>Description</th><th style="width:88px">Assigned</th><th style="width:50px">Bdg Hr</th><th style="width:50px">Act Hr</th><th style="width:56px">Hr Var</th><th style="width:68px">Mat Bdg</th><th style="width:68px">Mat Act</th><th style="width:70px">Mat Var</th><th style="width:76px">Status</th><th style="width:38px">Del</th></tr></thead>
+  <tbody id="jtb"><tr><td colspan="13" class="empty">Loading…</td></tr></tbody></table></div></div>`;
+}
+function fJCs(){
+  const bu=gv('jbu'),st=gv('jst');
+  const f=jcs.filter(j=>(!bu||j.bu===bu)&&(!st||j.status===st));
+  const tb=document.getElementById('jtb');if(!tb)return;
+  tb.innerHTML=f.length?f.map(j=>{
+    const bH=+j.budget_hrs||0,aH=+j.actual_hrs||0,bM=+j.mat_budget||0,aM=+j.mat_actual||0;
+    const hV=aH-bH,mV=aM-bM;
+    return `<tr><td class="mono">${j.jcref}</td><td class="mono">${j.job_ref}</td><td><span class="badge b-bu">${j.bu}</span></td><td style="white-space:normal;font-size:11px;line-height:1.4">${j.description}</td><td style="font-size:11px">${j.assigned}</td><td class="mono">${bH}</td><td class="mono ${aH>bH?'ob':''}">${aH}</td><td class="${hV>0?'pn':hV<0?'pp':'mono'}" style="font-size:11px">${hV===0?'—':(hV>0?'+':'')+hV}</td><td class="mono" style="font-size:11px">${R(bM)}</td><td class="mono ${aM>bM?'ob':''}" style="font-size:11px">${R(aM)}</td><td class="${mV>0?'pn':mV<0?'pp':'mono'}" style="font-size:11px">${mV===0?'—':(mV>0?'+':'')+R(Math.abs(mV))}</td><td><span class="badge ${obadge(j.status)}">${j.status}</span>${aH>bH||aM>bM?' <span style="color:#c53030;font-size:11px">⚠</span>':''}</td><td><button class="btn-d" onclick="dJC('${j.id}')">✕</button></td></tr>`;
+  }).join(''):'<tr><td colspan="13" class="empty">No job cards match</td></tr>';
+}
+function oJC(){
+  openM(`<div class="mtitle">New job card</div>
+    <div class="f2"><div class="mfr"><label>Job number (e.g. MM001)</label><input id="mJj"></div><div class="mfr"><label>JC ref (e.g. MM001/2)</label><input id="mJr"></div></div>
+    <div class="f2"><div class="mfr"><label>Business unit</label>${buS('mJb','')}</div><div class="mfr"><label>Assigned to</label><input id="mJa"></div></div>
+    <div class="mfr"><label>Description</label><input id="mJd"></div>
+    <div class="f2"><div class="mfr"><label>Budget hours</label><input type="number" id="mJbh" value="0"></div><div class="mfr"><label>Actual hours</label><input type="number" id="mJah" value="0"></div></div>
+    <div class="f2"><div class="mfr"><label>Material budget (R)</label><input type="number" id="mJmb" value="0"></div><div class="mfr"><label>Material actual (R)</label><input type="number" id="mJma" value="0"></div></div>
+    <div class="mfr"><label>Status</label><select id="mJs"><option>Open</option><option>In progress</option><option>Completed</option></select></div>
+    <div class="mfoot"><button class="btn" onclick="closeM()">Cancel</button><button class="btn btn-p" onclick="sJC()">Save job card</button></div>`);
+}
+async function sJC(){
+  try{await POST('job_cards',{jcref:gv('mJr'),job_ref:gv('mJj'),bu:gv('mJb'),description:gv('mJd'),assigned:gv('mJa'),budget_hrs:+gv('mJbh')||0,actual_hrs:+gv('mJah')||0,mat_budget:+gv('mJmb')||0,mat_actual:+gv('mJma')||0,status:gv('mJs')});closeM();await load();fJCs();toast('Job card saved','s');}catch(e){toast(e.message,'e');}
+}
+function dJC(id){cfm('Delete job card','Permanently delete?',async()=>{await DEL('job_cards','id=eq.'+id);await load();fJCs();toast('Deleted','s');});}
+function expJC(){
+  const bu=gv('jbu'),st=gv('jst');const f=jcs.filter(j=>(!bu||j.bu===bu)&&(!st||j.status===st));
+  xlx(f.map(j=>({a:j.jcref,b:j.job_ref,c:j.bu,d:j.description,e:j.assigned,f:+j.budget_hrs||0,g:+j.actual_hrs||0,h:(+j.actual_hrs||0)-(+j.budget_hrs||0),i:+j.mat_budget||0,j:+j.mat_actual||0,k:(+j.mat_actual||0)-(+j.mat_budget||0),l:j.status})),[{k:'a',l:'JC Ref',w:12},{k:'b',l:'Job #',w:10},{k:'c',l:'BU',w:18},{k:'d',l:'Description',w:28},{k:'e',l:'Assigned',w:18},{k:'f',l:'Bdg Hrs',w:10},{k:'g',l:'Act Hrs',w:10},{k:'h',l:'Hrs Var',w:10},{k:'i',l:'Mat Bdg',w:14},{k:'j',l:'Mat Act',w:14},{k:'k',l:'Mat Var',w:14},{k:'l',l:'Status',w:12}],'MM_JobCards.xlsx','Job Cards');
+}
+
+// ── FINANCE ──────────────────────────────────────────
+function rFin(){
+  const comp=orders.filter(o=>o.status==='Completed'&&!o.invoiced);
+  const totI=invs.reduce((s,i)=>s+(+i.order_val||0),0);
+  const totC=invs.reduce((s,i)=>s+(+i.mat_cost||0)+(+i.labour_cost||0)+(+i.overheads||0),0);
+  const totP=totI-totC,mg=totI>0?Math.round(totP/totI*100):0;
+  return `<div class="kpis">
+    <div class="kpi cgo"><div class="kpi-l">Total invoiced</div><div class="kpi-v">${R(totI)}</div></div>
+    <div class="kpi cn"><div class="kpi-l">Total cost</div><div class="kpi-v">${R(totC)}</div></div>
+    <div class="kpi ${totP>0?'cg':'cr'}"><div class="kpi-l">Gross profit</div><div class="kpi-v">${R(totP)}</div></div>
+    <div class="kpi ${mg>20?'cg':mg>10?'ca':'cr'}"><div class="kpi-l">Gross margin</div><div class="kpi-v">${mg}%</div></div>
+    <div class="kpi ${comp.length>0?'ca':'cg'}"><div class="kpi-l">Ready to invoice</div><div class="kpi-v">${comp.length}</div></div>
+  </div>
+  ${comp.length>0?`<div class="alert-a">⚠ ${comp.length} order${comp.length>1?'s':''} completed and pending invoicing — ${comp.map(o=>o.ref).join(', ')}<div style="display:flex;gap:6px;flex-wrap:wrap">${comp.map(o=>`<button class="btn btn-sm" onclick="mov2inv('${o.id}')">Invoice ${o.ref}</button>`).join('')}</div></div>`:''}
+  <div class="card"><div class="card-hd"><h3>Invoice register & profitability</h3>
+    <div class="card-hd-r"><select id="fbu" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All BUs</option>${BUS.map(b=>`<option>${b}</option>`).join('')}</select>
+    <button class="btn btn-e" onclick="expFin()">↓ Excel</button></div></div>
+  <div class="tw"><table><thead><tr><th style="width:98px">Invoice ref</th><th style="width:66px">Job #</th><th style="width:112px">Client</th><th style="width:103px">BU</th><th style="width:76px">Inv value</th><th style="width:70px">Mat cost</th><th style="width:63px">Labour</th><th style="width:58px">Overhead</th><th style="width:73px">Profit</th><th style="width:56px">Margin</th><th style="width:76px">Date</th><th style="width:70px">Status</th><th style="width:38px">Del</th></tr></thead>
+  <tbody>${invs.map(i=>{const p=(+i.order_val||0)-(+i.mat_cost||0)-(+i.labour_cost||0)-(+i.overheads||0);const m=(+i.order_val||0)>0?Math.round(p/(+i.order_val||1)*100):0;return `<tr><td class="mono">${i.inv_ref}</td><td class="mono">${i.job_ref}</td><td>${i.client}</td><td><span class="badge b-bu">${i.bu}</span></td><td class="mono">${R(+i.order_val)}</td><td class="mono">${R(+i.mat_cost)}</td><td class="mono">${R(+i.labour_cost)}</td><td class="mono">${R(+i.overheads)}</td><td class="${p>0?'pp':'pn'}">${R(p)}</td><td><span class="badge ${m>20?'b-won':'b-lost'}">${m}%</span></td><td class="mono" style="font-size:11px">${fd(i.invoiced_date)}</td><td><span class="badge ${i.status==='Paid'?'b-paid':'b-out'}">${i.status}</span></td><td><button class="btn-d" onclick="dInv('${i.id}')">✕</button></td></tr>`;}).join('')||'<tr><td colspan="13" class="empty">No invoices yet</td></tr>'}</tbody></table></div></div>`;
+}
+function dInv(id){cfm('Delete invoice','Permanently delete?',async()=>{await DEL('invoices','id=eq.'+id);await load();document.getElementById('body').innerHTML=rFin();toast('Deleted','s');});}
+function expFin(){
+  const bu=gv('fbu');const f=invs.filter(i=>!bu||i.bu===bu);
+  xlx(f.map(i=>{const p=(+i.order_val||0)-(+i.mat_cost||0)-(+i.labour_cost||0)-(+i.overheads||0);const m=(+i.order_val||0)>0?Math.round(p/(+i.order_val||1)*100):0;return{a:i.inv_ref,b:i.job_ref,c:i.client,d:i.bu,e:+i.order_val||0,f:+i.mat_cost||0,g:+i.labour_cost||0,h:+i.overheads||0,i:p,j:m+'%',k:fd(i.invoiced_date),l:i.status};}),[{k:'a',l:'Invoice Ref',w:14},{k:'b',l:'Job #',w:10},{k:'c',l:'Client',w:22},{k:'d',l:'BU',w:18},{k:'e',l:'Inv Value',w:16},{k:'f',l:'Mat Cost',w:14},{k:'g',l:'Labour',w:14},{k:'h',l:'Overhead',w:14},{k:'i',l:'Profit',w:14},{k:'j',l:'Margin',w:10},{k:'k',l:'Date',w:13},{k:'l',l:'Status',w:12}],'MM_Finance.xlsx','Finance');
+}
+
+// ── STARTUP ──────────────────────────────────────────
+window.onload=()=>{
+  const s=sessionStorage.getItem('mm');
+  if(s){cUser=JSON.parse(s);launch();}
+};
+</script>
+</body>
+</html>
