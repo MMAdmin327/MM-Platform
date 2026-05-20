@@ -399,7 +399,7 @@ function rBuyer(){
   var pend=spos.filter(function(p){return !p.received;}).reduce(function(s,p){return s+(+p.amount||0);},0);
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Supplier POs</div><div class="kpi-v">'+spos.length+'</div></div><div class="kpi cgo"><div class="kpi-l">Total committed</div><div class="kpi-v">'+R(tot)+'</div></div><div class="kpi ca"><div class="kpi-l">Pending delivery</div><div class="kpi-v">'+spos.filter(function(p){return !p.received;}).length+'</div><div class="kpi-s">'+R(pend)+'</div></div><div class="kpi cg"><div class="kpi-l">Received</div><div class="kpi-v">'+spos.filter(function(p){return p.received;}).length+'</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Supplier purchase orders</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addSPOBtn">+ Add PO</button><select id="bbu" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><button class="btn btn-e" id="expBuyerBtn">&#8595; Excel</button></div></div>'
-  +'<div class="tw"><table><thead><tr><th style="width:88px">SPO ref</th><th style="width:70px">Job #</th><th style="width:100px">BU</th><th style="width:115px">Supplier</th><th>Description</th><th style="width:80px">Amount</th><th style="width:86px">Ordered</th><th style="width:80px">Status</th><th style="width:88px">Actions</th></tr></thead><tbody id="btb">'+rSPOrows()+'</tbody></table></div></div>';
+  +'<div class="tw"><table><thead><tr><th style="width:80px">SPO ref</th><th style="width:62px">Job #</th><th style="width:90px">BU</th><th style="width:100px">Supplier</th><th>Description</th><th style="width:72px">Amount</th><th style="width:78px">Ordered</th><th style="width:74px">Status</th><th style="width:72px">Actions</th></tr></thead><tbody id="btb">'+rSPOrows()+'</tbody></table></div></div>';
 }
 
 function rSPOrows(){
@@ -417,7 +417,7 @@ function rJC(){
   var totA=jcs.reduce(function(s,j){return s+(+j.actual_hrs||0);},0);
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Total job cards</div><div class="kpi-v">'+jcs.length+'</div></div><div class="kpi '+(over>0?'cr':'cg')+'"><div class="kpi-l">Over budget</div><div class="kpi-v">'+over+'</div><div class="kpi-s">Hours or material</div></div><div class="kpi cb"><div class="kpi-l">Budget hours</div><div class="kpi-v">'+totB+'</div></div><div class="kpi '+(totA>totB?'cr':'cg')+'"><div class="kpi-l">Actual hours</div><div class="kpi-v">'+totA+'</div><div class="kpi-s">'+(totA>totB?'+'+(totA-totB)+' over':(totB-totA)+' left')+'</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Job card register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addJCBtn">+ Add job card</button><select id="jbu" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="jst" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All</option><option>Open</option><option>In progress</option><option>Completed</option></select><button class="btn btn-e" id="expJCBtn">&#8595; Excel</button></div></div>'
-  +'<div class="tw"><table><thead><tr><th style="width:86px">JC ref</th><th style="width:68px">Job #</th><th style="width:100px">BU</th><th>Description</th><th style="width:88px">Assigned</th><th style="width:50px">Bdg Hr</th><th style="width:50px">Act Hr</th><th style="width:56px">Hr Var</th><th style="width:68px">Mat Bdg</th><th style="width:68px">Mat Act</th><th style="width:70px">Mat Var</th><th style="width:76px">Status</th><th style="width:88px">Actions</th></tr></thead><tbody id="jtb"><tr><td colspan="13" class="empty">Loading...</td></tr></tbody></table></div></div>';
+  +'<div class="tw"><table><thead><tr><th style="width:80px">JC ref</th><th style="width:62px">Job #</th><th style="width:90px">BU</th><th style="width:130px">Description</th><th style="width:80px">Assigned</th><th style="width:46px">Bdg Hr</th><th style="width:46px">Act Hr</th><th style="width:50px">Hr Var</th><th style="width:62px">Mat Bdg</th><th style="width:62px">Mat Act</th><th style="width:64px">Mat Var</th><th style="width:70px">Status</th><th style="width:72px">Actions</th></tr></thead><tbody id="jtb"><tr><td colspan="13" class="empty">Loading...</td></tr></tbody></table></div></div>';
 }
 
 function fJCs(){
@@ -682,4 +682,8 @@ document.addEventListener('click',function(e){
 
 window.onload=function(){
   var s=null;try{s=sessionStorage.getItem('mm');}catch(e){}
-  if
+  if(s){try{cUser=JSON.parse(s);launch();}catch(e){}}
+};
+</script>
+</body>
+</html>
