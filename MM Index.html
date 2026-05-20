@@ -428,7 +428,7 @@ function fJCs(){
   tb.innerHTML=f.map(function(j){
     var bH=+j.budget_hrs||0,aH=+j.actual_hrs||0,bM=+j.mat_budget||0,aM=+j.mat_actual||0;
     var hV=aH-bH,mV=aM-bM;
-    return '<tr><td class="mono">'+j.jcref+'</td><td class="mono">'+j.job_ref+'</td><td><span class="badge b-bu">'+j.bu+'</span></td><td style="white-space:normal;font-size:11px;line-height:1.4">'+j.description+'</td><td style="font-size:11px">'+j.assigned+'</td><td class="mono">'+bH+'</td><td class="mono '+(aH>bH?'ob':'')+'">'+aH+'</td><td class="'+(hV>0?'pn':hV<0?'pp':'mono')+'" style="font-size:11px">'+(hV===0?'—':(hV>0?'+':'')+hV)+'</td><td class="mono" style="font-size:11px">'+R(bM)+'</td><td class="mono '+(aM>bM?'ob':'')+'" style="font-size:11px">'+R(aM)+'</td><td class="'+(mV>0?'pn':mV<0?'pp':'mono')+'" style="font-size:11px">'+(mV===0?'—':(mV>0?'+':'')+R(Math.abs(mV)))+'</td><td>'+obadge(j.status)+(aH>bH||aM>bM?' <span style="color:#c53030;font-size:11px">&#9888;</span>':'')+'</td><td><button class="btn-d" data-id="'+j.id+'" data-action="delJC">&#10005;</button></td></tr>';
+    return '<tr><td class="mono">'+j.jcref+'</td><td class="mono">'+j.job_ref+'</td><td><span class="badge b-bu">'+j.bu+'</span></td><td style="white-space:normal;font-size:11px;line-height:1.4">'+j.description+'</td><td style="font-size:11px">'+j.assigned+'</td><td class="mono">'+bH+'</td><td class="mono '+(aH>bH?'ob':'')+'">'+aH+'</td><td class="'+(hV>0?'pn':hV<0?'pp':'mono')+'" style="font-size:11px">'+(hV===0?'—':(hV>0?'+':'')+hV)+'</td><td class="mono" style="font-size:11px">'+R(bM)+'</td><td class="mono '+(aM>bM?'ob':'')+'" style="font-size:11px">'+R(aM)+'</td><td class="'+(mV>0?'pn':mV<0?'pp':'mono')+'" style="font-size:11px">'+(mV===0?'—':(mV>0?'+':'')+R(Math.abs(mV)))+'</td><td>'+obadge(j.status)+(aH>bH||aM>bM?' <span style="color:#c53030;font-size:11px">&#9888;</span>':'')+'</td><td><button class="btn-g" data-id="'+j.id+'" data-action="editJC">&#9998;</button> <button class="btn-d" data-id="'+j.id+'" data-action="delJC">&#10005;</button></td></tr>';
   }).join('');
 }
 
@@ -682,8 +682,4 @@ document.addEventListener('click',function(e){
 
 window.onload=function(){
   var s=null;try{s=sessionStorage.getItem('mm');}catch(e){}
-  if(s){try{cUser=JSON.parse(s);launch();}catch(e){}}
-};
-</script>
-</body>
-</html>
+  if
