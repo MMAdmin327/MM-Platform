@@ -407,7 +407,7 @@ function rSPOrows(){
   var f=spos.filter(function(p){return !bu||p.bu===bu;});
   if(!f.length)return '<tr><td colspan="9" class="empty">No supplier POs</td></tr>';
   return f.map(function(p){
-    return '<tr><td class="mono">'+p.spref+'</td><td class="mono">'+p.job_ref+'</td><td><span class="badge b-bu">'+p.bu+'</span></td><td style="font-size:11px">'+p.supplier+'</td><td style="white-space:normal;font-size:11px;line-height:1.4">'+p.description+'</td><td class="mono">'+R(+p.amount)+'</td><td class="mono" style="font-size:11px">'+fd(p.ordered)+'</td><td><span class="badge '+(p.received?'b-recv':'b-pend')+'">'+(p.received?'Received':'Pending')+'</span></td><td><button class="btn-g" data-id="'+p.id+'" data-action="togSPO" title="'+(p.received?'Mark pending':'Mark received')+'">'+(p.received?'&#8617;':'&#10003;')+'</button><button class="btn-d" data-id="'+p.id+'" data-action="delSPO">&#10005;</button></td></tr>';
+    return '<tr><td class="mono">'+p.spref+'</td><td class="mono">'+p.job_ref+'</td><td><span class="badge b-bu">'+p.bu+'</span></td><td style="font-size:11px">'+p.supplier+'</td><td style="white-space:normal;font-size:11px;line-height:1.4">'+p.description+'</td><td class="mono">'+R(+p.amount)+'</td><td class="mono" style="font-size:11px">'+fd(p.ordered)+'</td><td><span class="badge '+(p.received?'b-recv':'b-pend')+'">'+(p.received?'Received':'Pending')+'</span></td><td><button class="btn-g" data-id="'+p.id+'" data-action="togSPO" title="'+(p.received?'Mark pending':'Mark received')+'">'+(p.received?'&#8617;':'&#10003;')+'</button><button class="btn-g" data-id="'+p.id+'" data-action="editSPO">&#9998;</button><button class="btn-d" data-id="'+p.id+'" data-action="delSPO">&#10005;</button></td></tr>';
   }).join('');
 }
 
@@ -417,7 +417,7 @@ function rJC(){
   var totA=jcs.reduce(function(s,j){return s+(+j.actual_hrs||0);},0);
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Total job cards</div><div class="kpi-v">'+jcs.length+'</div></div><div class="kpi '+(over>0?'cr':'cg')+'"><div class="kpi-l">Over budget</div><div class="kpi-v">'+over+'</div><div class="kpi-s">Hours or material</div></div><div class="kpi cb"><div class="kpi-l">Budget hours</div><div class="kpi-v">'+totB+'</div></div><div class="kpi '+(totA>totB?'cr':'cg')+'"><div class="kpi-l">Actual hours</div><div class="kpi-v">'+totA+'</div><div class="kpi-s">'+(totA>totB?'+'+(totA-totB)+' over':(totB-totA)+' left')+'</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Job card register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addJCBtn">+ Add job card</button><select id="jbu" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="jst" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All</option><option>Open</option><option>In progress</option><option>Completed</option></select><button class="btn btn-e" id="expJCBtn">&#8595; Excel</button></div></div>'
-  +'<div class="tw"><table><thead><tr><th style="width:86px">JC ref</th><th style="width:68px">Job #</th><th style="width:100px">BU</th><th>Description</th><th style="width:88px">Assigned</th><th style="width:50px">Bdg Hr</th><th style="width:50px">Act Hr</th><th style="width:56px">Hr Var</th><th style="width:68px">Mat Bdg</th><th style="width:68px">Mat Act</th><th style="width:70px">Mat Var</th><th style="width:76px">Status</th><th style="width:38px">Del</th></tr></thead><tbody id="jtb"><tr><td colspan="13" class="empty">Loading...</td></tr></tbody></table></div></div>';
+  +'<div class="tw"><table><thead><tr><th style="width:86px">JC ref</th><th style="width:68px">Job #</th><th style="width:100px">BU</th><th>Description</th><th style="width:88px">Assigned</th><th style="width:50px">Bdg Hr</th><th style="width:50px">Act Hr</th><th style="width:56px">Hr Var</th><th style="width:68px">Mat Bdg</th><th style="width:68px">Mat Act</th><th style="width:70px">Mat Var</th><th style="width:76px">Status</th><th style="width:64px">Actions</th></tr></thead><tbody id="jtb"><tr><td colspan="13" class="empty">Loading...</td></tr></tbody></table></div></div>';
 }
 
 function fJCs(){
@@ -552,20 +552,41 @@ function oSPO(){
   });
 }
 
-function oJC(){
-  openM('<div class="mtitle">New job card</div>'
-  +'<div class="f2"><div class="mfr"><label>Job number (e.g. MM001)</label><input id="mJj"></div><div class="mfr"><label>JC ref (e.g. MM001/2)</label><input id="mJr"></div></div>'
-  +'<div class="f2"><div class="mfr"><label>Business unit</label>'+buS('mJb','')+'</div><div class="mfr"><label>Assigned to</label><input id="mJa"></div></div>'
-  +'<div class="mfr"><label>Description</label><input id="mJd"></div>'
-  +'<div class="f2"><div class="mfr"><label>Budget hours</label><input type="number" id="mJbh" value="0"></div><div class="mfr"><label>Actual hours</label><input type="number" id="mJah" value="0"></div></div>'
-  +'<div class="f2"><div class="mfr"><label>Material budget (R)</label><input type="number" id="mJmb" value="0"></div><div class="mfr"><label>Material actual (R)</label><input type="number" id="mJma" value="0"></div></div>'
-  +'<div class="mfr"><label>Status</label><select id="mJs"><option>Open</option><option>In progress</option><option>Completed</option></select></div>'
-  +'<div class="mfoot"><button class="btn" id="cancelJC">Cancel</button><button class="btn btn-p" id="saveJC">Save job card</button></div>');
+function oJC(editId){
+  var j=editId?(function(){for(var i=0;i<jcs.length;i++){if(jcs[i].id===editId)return jcs[i];}return null;})():null;
+  var openOrds=getOpenOrders();
+  var ordOpts=openOrds.map(function(o){return '<option value="'+o.ref+'"'+(j&&j.job_ref===o.ref?' selected':'')+'>'+o.ref+' — '+o.client+'</option>';}).join('');
+  if(!ordOpts)ordOpts='<option value="">No open orders available</option>';
+  var initJob=j?j.job_ref:(openOrds.length?openOrds[0].ref:'');
+  var initBU=j?j.bu:(openOrds.length?openOrds[0].bu:'');
+  var initRef=j?j.jcref:autoJCRef(initJob);
+  openM('<div class="mtitle">'+(editId?'Edit job card':'New job card')+'</div>'
+  +'<div class="mfr"><label>Order number (MM ref)</label><select id="mJj" onchange="onJCOrderChange()"><option value="">Select open order...</option>'+ordOpts+'</select></div>'
+  +'<div class="f2"><div class="mfr"><label>JC ref (auto-generated)</label><input id="mJr" value="'+initRef+'"></div><div class="mfr"><label>Business unit (auto)</label><input id="mJb" value="'+initBU+'" readonly style="background:#f4f6f9"></div></div>'
+  +'<div class="mfr"><label>Assigned to</label><input id="mJa" value="'+(j?j.assigned||'':'')+'"></div>'
+  +'<div class="mfr"><label>Description</label><input id="mJd" value="'+(j?j.description||'':'')+'"></div>'
+  +'<div class="f2"><div class="mfr"><label>Budget hours</label><input type="number" id="mJbh" value="'+(j?j.budget_hrs||0:0)+'"></div><div class="mfr"><label>Actual hours</label><input type="number" id="mJah" value="'+(j?j.actual_hrs||0:0)+'"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Material budget (R)</label><input type="number" id="mJmb" value="'+(j?j.mat_budget||0:0)+'"></div><div class="mfr"><label>Material actual (R)</label><input type="number" id="mJma" value="'+(j?j.mat_actual||0:0)+'"></div></div>'
+  +'<div class="mfr"><label>Status</label><select id="mJs">'+['Open','In progress','Completed'].map(function(s){return '<option'+(j&&j.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div>'
+  +'<div class="mfoot"><button class="btn" id="cancelJC">Cancel</button><button class="btn btn-p" id="saveJC">'+(editId?'Update job card':'Save job card')+'</button></div>');
   document.getElementById('cancelJC').addEventListener('click',closeM);
   document.getElementById('saveJC').addEventListener('click',function(){
-    dbPost('job_cards',{jcref:gv('mJr'),job_ref:gv('mJj'),bu:gv('mJb'),description:gv('mJd'),assigned:gv('mJa'),budget_hrs:+gv('mJbh')||0,actual_hrs:+gv('mJah')||0,mat_budget:+gv('mJmb')||0,mat_actual:+gv('mJma')||0,status:gv('mJs')})
-    .then(function(){closeM();return loadAll();}).then(function(){go('jc');toast('Job card saved','s');}).catch(function(e){toast(e.message,'e');});
+    var jobRef=gv('mJj');
+    if(!jobRef){toast('Please select an open order','e');return;}
+    var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===jobRef){ord=orders[i];break;}}
+    var data={jcref:gv('mJr'),job_ref:jobRef,bu:ord?ord.bu:gv('mJb'),description:gv('mJd'),assigned:gv('mJa'),budget_hrs:+gv('mJbh')||0,actual_hrs:+gv('mJah')||0,mat_budget:+gv('mJmb')||0,mat_actual:+gv('mJma')||0,status:gv('mJs')};
+    var pr=editId?dbPatch('job_cards','id=eq.'+editId,data):dbPost('job_cards',data);
+    pr.then(function(){closeM();return loadAll();}).then(function(){go('jc');toast(editId?'Job card updated':'Job card saved','s');}).catch(function(e){toast(e.message,'e');});
   });
+}
+
+function onJCOrderChange(){
+  var jobRef=gv('mJj');
+  var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===jobRef){ord=orders[i];break;}}
+  if(ord){
+    document.getElementById('mJb').value=ord.bu;
+    document.getElementById('mJr').value=autoJCRef(jobRef);
+  }
 }
 
 function expLeads(){
@@ -616,7 +637,9 @@ document.addEventListener('click',function(e){
   if(action==='editOrder')oOrder(id);
   if(action==='delOrder')cfm('Delete order','Permanently delete this order?',function(){dbDel('orders','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('orders');toast('Deleted','s');});});
   if(action==='togSPO'){var p=null;for(var i=0;i<spos.length;i++){if(spos[i].id===id){p=spos[i];break;}}if(p)dbPatch('supplier_pos','id=eq.'+id,{received:!p.received}).then(function(){return loadAll();}).then(function(){go('buyer');toast('Updated','s');});}
+  if(action==='editSPO')oSPO(id);
   if(action==='delSPO')cfm('Delete PO','Permanently delete?',function(){dbDel('supplier_pos','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('buyer');toast('Deleted','s');});});
+  if(action==='editJC')oJC(id);
   if(action==='delJC')cfm('Delete job card','Permanently delete?',function(){dbDel('job_cards','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('jc');toast('Deleted','s');});});
   if(action==='delInv')cfm('Delete invoice','Permanently delete?',function(){dbDel('invoices','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('fin');toast('Deleted','s');});});
   if(action==='addLead')oLead(null);
@@ -647,8 +670,8 @@ document.addEventListener('input',function(e){
 document.addEventListener('click',function(e){
   if(e.target.id==='addLeadBtn')oLead(null);
   if(e.target.id==='addOrderBtn')oOrder(null);
-  if(e.target.id==='addSPOBtn')oSPO();
-  if(e.target.id==='addJCBtn')oJC();
+  if(e.target.id==='addSPOBtn')oSPO(null);
+  if(e.target.id==='addJCBtn')oJC(null);
   if(e.target.id==='expLeadsBtn')expLeads();
   if(e.target.id==='expOrdersBtn')expOrders();
   if(e.target.id==='expBuyerBtn')expBuyer();
