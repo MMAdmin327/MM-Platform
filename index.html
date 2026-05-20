@@ -557,11 +557,11 @@ function oSPO(){
 
 function oJC(editId){
   var j=editId?(function(){for(var i=0;i<jcs.length;i++){if(jcs[i].id===editId)return jcs[i];}return null;})():null;
-  var openOrds=getOpenOrders();
-  var ordOpts=openOrds.map(function(o){return '<option value="'+o.ref+'"'+(j&&j.job_ref===o.ref?' selected':'')+'>'+o.ref+' — '+o.client+'</option>';}).join('');
+  var availOrds=editId?orders:getOpenOrders();
+  var ordOpts=availOrds.map(function(o){return '<option value="'+o.ref+'"'+(j&&j.job_ref===o.ref?' selected':'')+'>'+o.ref+' — '+o.client+'</option>';}).join('');
   if(!ordOpts)ordOpts='<option value="">No open orders available</option>';
-  var initJob=j?j.job_ref:(openOrds.length?openOrds[0].ref:'');
-  var initBU=j?j.bu:(openOrds.length?openOrds[0].bu:'');
+  var initJob=j?j.job_ref:(availOrds.length?availOrds[0].ref:'');
+  var initBU=j?j.bu:(availOrds.length?availOrds[0].bu:'');
   var initRef=j?j.jcref:autoJCRef(initJob);
   openM('<div class="mtitle">'+(editId?'Edit job card':'New job card')+'</div>'
   +'<div class="mfr"><label>Order number (MM ref)</label><select id="mJj" onchange="onJCOrderChange()"><option value="">Select open order...</option>'+ordOpts+'</select></div>'
