@@ -402,7 +402,7 @@ function rBuyer(){
   var pend=spos.filter(function(p){return !p.received;}).reduce(function(s,p){return s+(+p.amount||0);},0);
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Supplier POs</div><div class="kpi-v">'+spos.length+'</div></div><div class="kpi cgo"><div class="kpi-l">Total committed</div><div class="kpi-v">'+R(tot)+'</div></div><div class="kpi ca"><div class="kpi-l">Pending delivery</div><div class="kpi-v">'+spos.filter(function(p){return !p.received;}).length+'</div><div class="kpi-s">'+R(pend)+'</div></div><div class="kpi cg"><div class="kpi-l">Received</div><div class="kpi-v">'+spos.filter(function(p){return p.received;}).length+'</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Supplier purchase orders</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addSPOBtn">+ Add PO</button><select id="bbu" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><button class="btn btn-e" id="expBuyerBtn">&#8595; Excel</button></div></div>'
-  +'<div class="tw"><table><thead><tr><th style="width:75px">SPO ref</th><th style="width:58px">Job #</th><th style="width:80px">BU</th><th style="width:90px">Supplier</th><th>Description</th><th style="width:68px">Amount</th><th style="width:72px">Ordered</th><th style="width:70px">Status</th><th style="width:82px">Actions</th></tr></thead><tbody id="btb">'+rSPOrows()+'</tbody></table></div></div>';
+  +'<div class="tw"><table><thead><tr><th>SPO ref</th><th>Job #</th><th>BU</th><th>Supplier</th><th>Description</th><th>Amount</th><th>Ordered</th><th>Status</th><th>Actions</th></tr></thead><tbody id="btb">'+rSPOrows()+'</tbody></table></div></div>';
 }
 
 function rSPOrows(){
@@ -443,7 +443,7 @@ function rFin(){
   return '<div class="kpis"><div class="kpi cgo"><div class="kpi-l">Total invoiced</div><div class="kpi-v">'+R(invT)+'</div></div><div class="kpi cn"><div class="kpi-l">Total cost</div><div class="kpi-v">'+R(invC)+'</div></div><div class="kpi '+(prof>0?'cg':'cr')+'"><div class="kpi-l">Gross profit</div><div class="kpi-v">'+R(prof)+'</div></div><div class="kpi '+(mg>20?'cg':mg>10?'ca':'cr')+'"><div class="kpi-l">Gross margin</div><div class="kpi-v">'+mg+'%</div></div><div class="kpi '+(comp.length>0?'ca':'cg')+'"><div class="kpi-l">Ready to invoice</div><div class="kpi-v">'+comp.length+'</div></div></div>'
   +(comp.length>0?'<div class="alert-a">&#9888; '+comp.length+' completed order'+(comp.length>1?'s':'')+' ready — '+comp.map(function(o){return o.ref;}).join(', ')+'<div style="display:flex;gap:6px;flex-wrap:wrap">'+comp.map(function(o){return '<button class="btn btn-sm" data-id="'+o.id+'" data-action="toFinance">&rarr; Invoice '+o.ref+'</button>';}).join('')+'</div></div>':'')
   +'<div class="card"><div class="card-hd"><h3>Invoice register &amp; profitability</h3><div class="card-hd-r"><select id="fbu" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><button class="btn btn-e" id="expFinBtn">&#8595; Excel</button></div></div>'
-  +'<div class="tw"><table><thead><tr><th style="width:98px">Invoice ref</th><th style="width:66px">Job #</th><th style="width:110px">Client</th><th style="width:100px">BU</th><th style="width:76px">Value</th><th style="width:70px">Mat cost</th><th style="width:63px">Labour</th><th style="width:58px">OH</th><th style="width:73px">Profit</th><th style="width:56px">Margin</th><th style="width:76px">Date</th><th style="width:70px">Status</th><th style="width:38px">Del</th></tr></thead><tbody>'+invs.map(function(i){var p=(+i.order_val||0)-(+i.mat_cost||0)-(+i.labour_cost||0)-(+i.overheads||0);var m=(+i.order_val||0)>0?Math.round(p/(+i.order_val||1)*100):0;return '<tr><td class="mono">'+i.inv_ref+'</td><td class="mono">'+i.job_ref+'</td><td>'+i.client+'</td><td><span class="badge b-bu">'+i.bu+'</span></td><td class="mono">'+R(+i.order_val)+'</td><td class="mono">'+R(+i.mat_cost)+'</td><td class="mono">'+R(+i.labour_cost)+'</td><td class="mono">'+R(+i.overheads)+'</td><td class="'+(p>0?'pp':'pn')+'">'+R(p)+'</td><td><span class="badge '+(m>20?'b-won':'b-lost')+'">'+m+'%</span></td><td class="mono" style="font-size:11px">'+fd(i.invoiced_date)+'</td><td><span class="badge '+(i.status==='Paid'?'b-paid':'b-out')+'">'+i.status+'</span></td><td><button class="btn-d" data-id="'+i.id+'" data-action="delInv">&#10005;</button></td></tr>';}).join('')+(invs.length===0?'<tr><td colspan="13" class="empty">No invoices yet</td></tr>':'')+'</tbody></table></div></div>';
+  +'<div class="tw"><table><thead><tr><th style="width:98px">Invoice ref</th><th style="width:66px">Job #</th><th style="width:110px">Client</th><th style="width:100px">BU</th><th style="width:76px">Value</th><th style="width:70px">Mat cost</th><th style="width:63px">Labour</th><th style="width:58px">OH</th><th style="width:73px">Profit</th><th style="width:56px">Margin</th><th style="width:76px">Date</th><th style="width:70px">Status</th><th style="width:72px">Actions</th></tr></thead><tbody>'+invs.map(function(i){var p=(+i.order_val||0)-(+i.mat_cost||0)-(+i.labour_cost||0)-(+i.overheads||0);var m=(+i.order_val||0)>0?Math.round(p/(+i.order_val||1)*100):0;return '<tr><td class="mono">'+i.inv_ref+'</td><td class="mono">'+i.job_ref+'</td><td>'+i.client+'</td><td><span class="badge b-bu">'+i.bu+'</span></td><td class="mono">'+R(+i.order_val)+'</td><td class="mono">'+R(+i.mat_cost)+'</td><td class="mono">'+R(+i.labour_cost)+'</td><td class="mono">'+R(+i.overheads)+'</td><td class="'+(p>0?'pp':'pn')+'">'+R(p)+'</td><td><span class="badge '+(m>20?'b-won':'b-lost')+'">'+m+'%</span></td><td class="mono" style="font-size:11px">'+fd(i.invoiced_date)+'</td><td><span class="badge '+(i.status==='Paid'?'b-paid':'b-out')+'">'+i.status+'</span></td><td style="white-space:nowrap"><button class="btn-g" data-id="'+i.id+'" data-action="editInv">&#9998;</button> <button class="btn-d" data-id="'+i.id+'" data-action="delInv">&#10005;</button></td></tr>';}).join('')+(invs.length===0?'<tr><td colspan="13" class="empty">No invoices yet</td></tr>':'')+'</tbody></table></div></div>';
 }
 
 function wonToOrder(id){
@@ -620,6 +620,22 @@ function expJC(){
   [{k:'a',l:'JC Ref',w:12},{k:'b',l:'Job #',w:10},{k:'c',l:'BU',w:18},{k:'d',l:'Description',w:28},{k:'e',l:'Assigned',w:18},{k:'f',l:'Bdg Hrs',w:10},{k:'g',l:'Act Hrs',w:10},{k:'h',l:'Hrs Var',w:10},{k:'i',l:'Mat Bdg',w:14},{k:'j',l:'Mat Act',w:14},{k:'k',l:'Mat Var',w:14},{k:'l',l:'Status',w:12}],
   'MM_JobCards.xlsx','Job Cards');
 }
+function oInv(id){
+  var i=null;for(var x=0;x<invs.length;x++){if(invs[x].id===id){i=invs[x];break;}}
+  if(!i)return;
+  openM('<div class="mtitle">Edit invoice</div>'
+  +'<div class="f2"><div class="mfr"><label>Invoice ref</label><input id="eIr" value="'+(i.inv_ref||'')+'"></div><div class="mfr"><label>Invoice date</label><input type="date" id="eId" value="'+(i.invoiced_date||'')+'"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Client</label><input id="eIc" value="'+(i.client||'')+'" readonly style="background:#f4f6f9"></div><div class="mfr"><label>Invoice value (R)</label><input type="number" id="eIv" value="'+(i.order_val||0)+'"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Material cost (R)</label><input type="number" id="eIm" value="'+(i.mat_cost||0)+'"></div><div class="mfr"><label>Labour cost (R)</label><input type="number" id="eIl" value="'+(i.labour_cost||0)+'"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Overheads (R)</label><input type="number" id="eIo" value="'+(i.overheads||0)+'"></div><div class="mfr"><label>Status</label><select id="eIs"><option'+(i.status==='Outstanding'?' selected':'')+'>Outstanding</option><option'+(i.status==='Paid'?' selected':'')+'>Paid</option></select></div></div>'
+  +'<div class="mfoot"><button class="btn" id="cancelInvE">Cancel</button><button class="btn btn-p" id="saveInvE">Update invoice</button></div>');
+  document.getElementById('cancelInvE').addEventListener('click',closeM);
+  document.getElementById('saveInvE').addEventListener('click',function(){
+    var data={inv_ref:gv('eIr'),order_val:+gv('eIv')||0,mat_cost:+gv('eIm')||0,labour_cost:+gv('eIl')||0,overheads:+gv('eIo')||0,invoiced_date:fmtD(gv('eId')),status:gv('eIs')};
+    dbPatch('invoices','id=eq.'+id,data).then(function(){closeM();return loadAll();}).then(function(){go('fin');toast('Invoice updated','s');}).catch(function(e){toast(e.message,'e');});
+  });
+}
+
 function expFin(){
   var bu=gv('fbu');
   var f=invs.filter(function(i){return !bu||i.bu===bu;});
@@ -644,6 +660,7 @@ document.addEventListener('click',function(e){
   if(action==='delSPO')cfm('Delete PO','Permanently delete?',function(){dbDel('supplier_pos','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('buyer');toast('Deleted','s');});});
   if(action==='editJC')oJC(id);
   if(action==='delJC')cfm('Delete job card','Permanently delete?',function(){dbDel('job_cards','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('jc');toast('Deleted','s');});});
+  if(action==='editInv')oInv(id);
   if(action==='delInv')cfm('Delete invoice','Permanently delete?',function(){dbDel('invoices','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('fin');toast('Deleted','s');});});
   if(action==='addLead')oLead(null);
   if(action==='addOrder')oOrder(null);
