@@ -401,13 +401,22 @@ function rBuyer(){
   var tot=spos.reduce(function(s,p){return s+(+p.amount||0);},0);
   var pend=spos.filter(function(p){return !p.received;}).reduce(function(s,p){return s+(+p.amount||0);},0);
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Supplier POs</div><div class="kpi-v">'+spos.length+'</div></div><div class="kpi cgo"><div class="kpi-l">Total committed</div><div class="kpi-v">'+R(tot)+'</div></div><div class="kpi ca"><div class="kpi-l">Pending delivery</div><div class="kpi-v">'+spos.filter(function(p){return !p.received;}).length+'</div><div class="kpi-s">'+R(pend)+'</div></div><div class="kpi cg"><div class="kpi-l">Received</div><div class="kpi-v">'+spos.filter(function(p){return p.received;}).length+'</div></div></div>'
-  +'<div class="card"><div class="card-hd"><h3>Supplier purchase orders</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addSPOBtn">+ Add PO</button><select id="bbu" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><button class="btn btn-e" id="expBuyerBtn">&#8595; Excel</button></div></div>'
+  +'<div class="card"><div class="card-hd"><h3>Supplier purchase orders</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addSPOBtn">+ Add PO</button><button class="btn btn-e" id="expBuyerBtn">&#8595; Excel</button></div></div>'
+  +'<div class="toolbar"><input type="text" id="bs" placeholder="Search SPO, job, supplier..."><select id="bbu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="bst"><option value="">All statuses</option><option value="received">Received</option><option value="pending">Pending</option></select></div>'
   +'<div class="tw"><table><thead><tr><th>SPO ref</th><th>Job #</th><th>BU</th><th>Supplier</th><th>Description</th><th>Amount</th><th>Ordered</th><th>Status</th><th>Actions</th></tr></thead><tbody id="btb">'+rSPOrows()+'</tbody></table></div></div>';
 }
 
 function rSPOrows(){
+  var s=document.getElementById('bs')?document.getElementById('bs').value.toLowerCase():'';
   var bu=gv('bbu');
-  var f=spos.filter(function(p){return !bu||p.bu===bu;});
+  var st=gv('bst');
+  var f=spos.filter(function(p){
+    if(s&&(p.spref+p.job_ref+p.supplier+p.description).toLowerCase().indexOf(s)<0)return false;
+    if(bu&&p.bu!==bu)return false;
+    if(st==='received'&&!p.received)return false;
+    if(st==='pending'&&p.received)return false;
+    return true;
+  });
   if(!f.length)return '<tr><td colspan="9" class="empty">No supplier POs</td></tr>';
   return f.map(function(p){
     return '<tr><td class="mono">'+p.spref+'</td><td class="mono">'+p.job_ref+'</td><td><span class="badge b-bu">'+p.bu+'</span></td><td style="font-size:11px">'+p.supplier+'</td><td style="white-space:normal;font-size:11px;line-height:1.4">'+p.description+'</td><td class="mono">'+R(+p.amount)+'</td><td class="mono" style="font-size:11px">'+fd(p.ordered)+'</td><td><span class="badge '+(p.received?'b-recv':'b-pend')+'">'+(p.received?'Received':'Pending')+'</span></td><td><button class="btn-g" data-id="'+p.id+'" data-action="togSPO" title="'+(p.received?'Mark pending':'Mark received')+'">'+(p.received?'&#8617;':'&#10003;')+'</button>&nbsp;<button class="btn-g" data-id="'+p.id+'" data-action="editSPO">&#9998;</button>&nbsp;<button class="btn-d" data-id="'+p.id+'" data-action="delSPO">&#10005;</button></td></tr>';
@@ -419,13 +428,20 @@ function rJC(){
   var totB=jcs.reduce(function(s,j){return s+(+j.budget_hrs||0);},0);
   var totA=jcs.reduce(function(s,j){return s+(+j.actual_hrs||0);},0);
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Total job cards</div><div class="kpi-v">'+jcs.length+'</div></div><div class="kpi '+(over>0?'cr':'cg')+'"><div class="kpi-l">Over budget</div><div class="kpi-v">'+over+'</div><div class="kpi-s">Hours or material</div></div><div class="kpi cb"><div class="kpi-l">Budget hours</div><div class="kpi-v">'+totB+'</div></div><div class="kpi '+(totA>totB?'cr':'cg')+'"><div class="kpi-l">Actual hours</div><div class="kpi-v">'+totA+'</div><div class="kpi-s">'+(totA>totB?'+'+(totA-totB)+' over':(totB-totA)+' left')+'</div></div></div>'
-  +'<div class="card"><div class="card-hd"><h3>Job card register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addJCBtn">+ Add job card</button><select id="jbu" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="jst" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All</option><option>Open</option><option>In progress</option><option>Completed</option></select><button class="btn btn-e" id="expJCBtn">&#8595; Excel</button></div></div>'
+  +'<div class="card"><div class="card-hd"><h3>Job card register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addJCBtn">+ Add job card</button><button class="btn btn-e" id="expJCBtn">&#8595; Excel</button></div></div>'
+  +'<div class="toolbar"><input type="text" id="js" placeholder="Search JC ref, MM number, description..."><select id="jbu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="jst"><option value="">All statuses</option><option>Open</option><option>In progress</option><option>Completed</option></select></div>'
   +'<div class="tw"><table><thead><tr><th style="width:80px">JC ref</th><th style="width:62px">Job #</th><th style="width:90px">BU</th><th style="width:130px">Description</th><th style="width:80px">Assigned</th><th style="width:46px">Bdg Hr</th><th style="width:46px">Act Hr</th><th style="width:50px">Hr Var</th><th style="width:62px">Mat Bdg</th><th style="width:62px">Mat Act</th><th style="width:64px">Mat Var</th><th style="width:70px">Status</th><th class="sticky-col" style="width:80px">Actions</th></tr></thead><tbody id="jtb"><tr><td colspan="13" class="empty">Loading...</td></tr></tbody></table></div></div>';
 }
 
 function fJCs(){
+  var s=document.getElementById('js')?document.getElementById('js').value.toLowerCase():'';
   var bu=gv('jbu'),st=gv('jst');
-  var f=jcs.filter(function(j){return (!bu||j.bu===bu)&&(!st||j.status===st);});
+  var f=jcs.filter(function(j){
+    if(s&&(j.jcref+j.job_ref+j.description+j.assigned).toLowerCase().indexOf(s)<0)return false;
+    if(bu&&j.bu!==bu)return false;
+    if(st&&j.status!==st)return false;
+    return true;
+  });
   var tb=document.getElementById('jtb');if(!tb)return;
   if(!f.length){tb.innerHTML='<tr><td colspan="13" class="empty">No job cards match</td></tr>';return;}
   tb.innerHTML=f.map(function(j){
@@ -679,19 +695,21 @@ document.addEventListener('change',function(e){
   if(el.id==='ls'||el.id==='lbu'||el.id==='lst')fLeads();
   if(el.id==='os'||el.id==='obu'||el.id==='ost')fOrders();
   if(el.id==='jbu'||el.id==='jst')fJCs();
-  if(el.id==='bbu'){var tb=document.getElementById('btb');if(tb)tb.innerHTML=rSPOrows();}
+  if(el.id==='bbu'||el.id==='bst'){var tb=document.getElementById('btb');if(tb)tb.innerHTML=rSPOrows();}
 });
 document.addEventListener('input',function(e){
   var el=e.target;
   if(el.id==='ls')fLeads();
   if(el.id==='os')fOrders();
+  if(el.id==='js')fJCs();
+  if(el.id==='bs'){var tb=document.getElementById('btb');if(tb)tb.innerHTML=rSPOrows();}
 });
 
 document.addEventListener('click',function(e){
   if(e.target.id==='addLeadBtn')oLead(null);
   if(e.target.id==='addOrderBtn')oOrder(null);
   if(e.target.id==='addSPOBtn')oSPO(null);
-  if(e.target.id==='addJCBtn')oJC(null);
+  if(e.target.id==='addJCBtn'){oJC(null);return;}
   if(e.target.id==='expLeadsBtn')expLeads();
   if(e.target.id==='expOrdersBtn')expOrders();
   if(e.target.id==='expBuyerBtn')expBuyer();
