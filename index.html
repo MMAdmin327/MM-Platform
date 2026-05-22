@@ -661,6 +661,17 @@ function expFin(){
 }
 
 document.addEventListener('click',function(e){
+  var tid=e.target.id;
+  if(tid==='addLeadBtn'){oLead(null);return;}
+  if(tid==='addOrderBtn'){oOrder(null);return;}
+  if(tid==='addSPOBtn'){oSPO(null);return;}
+  if(tid==='addJCBtn'){oJC(null);return;}
+  if(tid==='expLeadsBtn'){expLeads();return;}
+  if(tid==='expOrdersBtn'){expOrders();return;}
+  if(tid==='expBuyerBtn'){expBuyer();return;}
+  if(tid==='expJCBtn'){expJC();return;}
+  if(tid==='expFinBtn'){expFin();return;}
+  if(tid==='refreshBtn'){loadAll().then(function(){go('dash');});return;}
   var el=e.target.closest('[data-action]');
   if(!el)return;
   var action=el.getAttribute('data-action');
@@ -705,18 +716,7 @@ document.addEventListener('input',function(e){
   if(el.id==='bs'){var tb=document.getElementById('btb');if(tb)tb.innerHTML=rSPOrows();}
 });
 
-document.addEventListener('click',function(e){
-  if(e.target.id==='addLeadBtn')oLead(null);
-  if(e.target.id==='addOrderBtn')oOrder(null);
-  if(e.target.id==='addSPOBtn')oSPO(null);
-  if(e.target.id==='addJCBtn'){oJC(null);return;}
-  if(e.target.id==='expLeadsBtn')expLeads();
-  if(e.target.id==='expOrdersBtn')expOrders();
-  if(e.target.id==='expBuyerBtn')expBuyer();
-  if(e.target.id==='expJCBtn')expJC();
-  if(e.target.id==='expFinBtn')expFin();
-  if(e.target.id==='refreshBtn')loadAll().then(function(){go('dash');});
-});
+
 
 window.onload=function(){
   var s=null;try{s=sessionStorage.getItem('mm');}catch(e){}
