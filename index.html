@@ -619,15 +619,13 @@ function processPDFPO(file){
   var msg=document.getElementById('spoAIMsg');
   if(!status||!msg)return;
   status.style.display='block';
-  msg.textContent='📖 Reading your PDF...';
+  msg.textContent='Reading your PDF...';
 
-  // Use PDF.js to extract text, then send text to Claude
   var fileURL=URL.createObjectURL(file);
   pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   pdfjsLib.getDocument(fileURL).promise.then(function(pdf){
     var pages=[];
-    var total=pdf.numPages;
-    for(var i=1;i<=total;i++){pages.push(i);}
+    for(var i=1;i<=pdf.numPages;i++){pages.push(i);}
     return Promise.all(pages.map(function(n){
       return pdf.getPage(n).then(function(page){
         return page.getTextContent().then(function(tc){
@@ -636,53 +634,40 @@ function processPDFPO(file){
       });
     }));
   }).then(function(pageTexts){
-    var pdfText=pageTexts.join('\n');
-    msg.textContent='🤖 Claude AI is extracting PO details...';
-    var prompt='You are reading a supplier Purchase Order for Mine Minerals Supplies & Services in South Africa. Here is the extracted text from the PO:\n\n'+pdfText+'\n\nExtract the following and return ONLY a raw JSON object, no markdown, no explanation:\n{"spref":"PO reference number","job_ref":"MM job number (MM followed by digits)","supplier":"supplier name","description":"brief summary of items max 120 chars","amount":excl_total_number,"ordered":"YYYY-MM-DD"}\nThe amount must be the Total Exclusive (excl VAT) as a plain number. If not found use 0.';
+    var txt=pageTexts.join(' ');
+    msg.textContent='Extracting fields...';
 
-    var storedKey=localStorage.getItem('mm_anthropic_key')||'';
-    if(!storedKey){alert('Please set your Anthropic API key in Settings (top right menu).');return;}
-    fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':storedKey,','anthropic-version':'2023-06-01'},
-      body:JSON.stringify({
-        model:'claude-haiku-4-5-20251001',
-        max_tokens:2000,
-        messages:[{role:'user',content:[{type:'text',text:prompt}]}]
-      })
-    })
-    .then(function(r){return r.text();})
-    .then(function(rawText){
-      alert('RAW HTTP RESPONSE: '+rawText.substring(0,600));
-      var data={};
-      try{data=JSON.parse(rawText);}catch(e){alert('JSON PARSE FAILED: '+e.message);return;}
-      var txt='';
-      if(data.content&&data.content[0]&&data.content[0].text){txt=data.content[0].text.trim();}
-      txt=txt.replace(/```json/gi,'').replace(/```/g,'').trim();
-      var jm=txt.match(/\{[\s\S]*\}/);
-      if(jm)txt=jm[0];
-      var parsed={spref:'SPO-'+String(spos.length+1).padStart(3,'0'),job_ref:'',bu:'',supplier:'',description:'',amount:0,ordered:td()};
-      var success=false;
+    var parsed={spref:'SPO-'+String(spos.length+1).padStart(3,'0'),job_ref:'',bu:'',supplier:'',description:'',amount:0,ordered:td()};
 
-      try{
-        var ex=JSON.parse(txt);
-        if(ex.spref&&ex.spref.indexOf('PO number')<0)parsed.spref=ex.spref;
-        if(ex.job_ref&&ex.job_ref.indexOf('MM job')<0)parsed.job_ref=ex.job_ref;
-        if(ex.supplier&&ex.supplier.indexOf('supplier company')<0)parsed.supplier=ex.supplier;
-        if(ex.description&&ex.description.indexOf('brief summary')<0)parsed.description=ex.description;
-        if(ex.amount){var av=parseFloat(String(ex.amount).replace(/[^0-9.]/g,''));if(av>0)parsed.amount=av;}
-        if(ex.ordered){var dm=String(ex.ordered).match(/\d{4}-\d{2}-\d{2}/);if(dm)parsed.ordered=dm[0];}
-        success=true;
-      }catch(e){alert('PARSE ERROR: '+e.message+' RAW: '+txt.substring(0,200));}
-      closeM();
-      oSPOForm(parsed,success);
-    })
-    .catch(function(e){
-      msg.textContent='❌ Error reading PDF: '+e.message;
-      toast('PDF read failed','e');
-    });
+    // PO Number
+    var m1=txt.match(/NUMBER[:\s]+([A-Z0-9\-]+)/i);
+    if(m1)parsed.spref=m1[1].trim();
+
+    // MM Reference
+    var m2=txt.match(/REFERENCE[:\s]+(MM\d+)/i)||txt.match(/\b(MM\d{3,})\b/);
+    if(m2)parsed.job_ref=m2[1].trim();
+
+    // Supplier name - text after TO
+    var m3=txt.match(/\bTO\b\s+([A-Z][A-Z\s&]{3,40}?)(?:\s+VAT|\s+SUPPLIER|\s+POSTAL|\s+PHYSICAL)/);
+    if(m3)parsed.supplier=m3[1].trim();
+
+    // Date
+    var m4=txt.match(/(?:^|\s)DATE[:\s]+(\d{2}\/\d{2}\/\d{4})/i);
+    if(m4){var pt=m4[1].split('/');parsed.ordered=pt[2]+'-'+pt[1]+'-'+pt[0];}
+
+    // Excl Total
+    var m5=txt.match(/Total\s+Exclusive[:\s]+R?\s*([\d\s,]+\.?\d*)/i);
+    if(m5)parsed.amount=parseFloat(m5[1].replace(/[\s,]/g,''))||0;
+
+    // Description
+    var m6=txt.match(/\d+\s+OFF\s+(.{10,80}?)(?:\s+R\d|\s+\d+\.)/);
+    if(m6)parsed.description=m6[1].trim().substring(0,120);
+    else if(parsed.supplier)parsed.description='Supplier PO from '+parsed.supplier;
+
+    closeM();
+    oSPOForm(parsed,true);
   }).catch(function(e){
-    msg.textContent='❌ Error reading PDF: '+e.message;
+    msg.textContent='Error: '+e.message;
     toast('PDF read failed — try manual entry','e');
   });
 }
