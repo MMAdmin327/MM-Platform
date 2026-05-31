@@ -24,7 +24,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .lbtn:hover{background:var(--navy2)}
 .lerr{background:var(--red-bg);border:1px solid #fed7d7;color:var(--red);border-radius:var(--r);padding:9px 12px;font-size:12px;margin-top:10px;display:none;text-align:left}
 #app{display:none}
-.wrap{max-width:1440px;margin:0 auto;padding:14px}
+.wrap{max-width:1600px;margin:0 auto;padding:14px}
 .hdr{background:var(--navy);display:flex;align-items:stretch;min-height:56px;border-radius:10px 10px 0 0;overflow:hidden}
 .hdr-brand{background:var(--navy2);padding:0 18px;display:flex;align-items:center;gap:11px;border-right:1px solid rgba(255,255,255,.07)}
 .hdr-logo{width:36px;height:36px;object-fit:contain;border-radius:4px}
@@ -77,10 +77,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .tw{overflow-x:auto}
 .sticky-col{position:sticky;right:0;background:#fff;box-shadow:-2px 0 4px rgba(0,0,0,.06)}
 tr:hover .sticky-col{background:#f8fafc}
-table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
-.tw table{min-width:600px}
-th{text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;padding:8px 12px;border-bottom:1px solid var(--border);background:#fafbfc;white-space:nowrap}
-td{padding:8px 12px;border-bottom:1px solid #f0f2f5;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+table{width:100%;border-collapse:collapse;font-size:12px;table-layout:auto}
+.tw table{min-width:900px}
+th{text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;padding:10px 16px;border-bottom:1px solid var(--border);background:#fafbfc;white-space:nowrap}
+td{padding:10px 16px;border-bottom:1px solid #f0f2f5;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:#f8fafc}
 .mono{font-family:'DM Mono',monospace;font-size:11px}
@@ -338,7 +338,7 @@ function rDash(){
   }).join('');
   return '<div class="kpis"><div class="kpi cgo"><div class="kpi-l">Pipeline value</div><div class="kpi-v">'+R(pipe)+'</div><div class="kpi-s">'+leads.filter(function(l){return l.status==='Lead'||l.status==='Quoted';}).length+' active leads</div></div><div class="kpi cg"><div class="kpi-l">Quotes won</div><div class="kpi-v">'+won+'</div><div class="kpi-s">Jobs secured</div></div><div class="kpi cb"><div class="kpi-l">Open order book</div><div class="kpi-v">'+R(openV)+'</div><div class="kpi-s">'+openOrds.length+' open</div></div><div class="kpi '+(lateO>0?'cr':'cg')+'"><div class="kpi-l">Overdue orders</div><div class="kpi-v">'+lateO+'</div><div class="kpi-s">Past due date</div></div><div class="kpi '+(lateQ>0?'ca':'cg')+'"><div class="kpi-l">Overdue quotes</div><div class="kpi-v">'+lateQ+'</div><div class="kpi-s">3-day SLA</div></div><div class="kpi '+(mg>15?'cg':mg>0?'ca':'cr')+'"><div class="kpi-l">Gross margin</div><div class="kpi-v">'+mg+'%</div><div class="kpi-s">Invoiced work</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Order book by business unit</h3><button class="btn btn-sm" id="refreshBtn">&#8635; Refresh</button></div><div class="tw"><table><thead><tr><th>Business unit</th><th>Open value</th><th style="text-align:center">Orders</th><th>Health</th></tr></thead><tbody>'+(buR||'<tr><td colspan="4" class="empty">No open orders</td></tr>')+'</tbody></table></div></div>'
-  +'<div class="card"><div class="card-hd"><h3>Live order feed</h3></div><div class="tw"><table><thead><tr><th style="width:78px">Job #</th><th style="width:130px">Client</th><th style="width:108px">BU</th><th style="width:88px">Value</th><th style="width:78px">Due</th><th style="width:68px">SLA</th><th>Status</th></tr></thead><tbody>'+openOrds.map(function(o){return '<tr><td class="mono">'+o.ref+'</td><td>'+o.client+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono" style="font-size:11px">'+fd(o.due)+'</td><td>'+sla(o.due,o.status)+'</td><td>'+obadge(o.status)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+  +'<div class="card"><div class="card-hd"><h3>Live order feed</h3></div><div class="tw"><table><thead><tr><th>Job #</th><th>Client</th><th>BU</th><th>Value</th><th>Due</th><th>SLA</th><th>Status</th></tr></thead><tbody>'+openOrds.map(function(o){return '<tr><td class="mono">'+o.ref+'</td><td>'+o.client+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+sla(o.due,o.status)+'</td><td>'+obadge(o.status)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
 }
 
 function rLeads(){
@@ -347,7 +347,7 @@ function rLeads(){
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Active leads</div><div class="kpi-v">'+leads.filter(function(l){return l.status!=='Moved';}).length+'</div></div><div class="kpi '+(lQ>0?'cr':'cg')+'"><div class="kpi-l">Overdue quotes</div><div class="kpi-v">'+lQ+'</div><div class="kpi-s">3-day SLA</div></div><div class="kpi cg"><div class="kpi-l">Won</div><div class="kpi-v">'+leads.filter(function(l){return l.status==='Won'||l.status==='Moved';}).length+'</div></div><div class="kpi cr"><div class="kpi-l">Lost</div><div class="kpi-v">'+leads.filter(function(l){return l.status==='Lost';}).length+'</div></div><div class="kpi cgo"><div class="kpi-l">Pipeline value</div><div class="kpi-v">'+R(pipe)+'</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Leads &amp; quotes register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addLeadBtn">+ Add lead</button><button class="btn btn-e" id="expLeadsBtn">&#8595; Excel</button></div></div>'
   +'<div class="toolbar"><input type="text" id="ls" placeholder="Search..."><select id="lbu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="lst"><option value="">All statuses</option><option>Lead</option><option>Quoted</option><option>Won</option><option>Lost</option></select></div>'
-  +'<div class="tw"><table><thead><tr><th style="width:100px">Ref</th><th style="width:120px">Client</th><th style="width:100px">BU</th><th style="width:88px">Type</th><th style="width:76px">Quote due</th><th style="width:60px">SLA</th><th style="width:78px">Value</th><th style="width:68px">Status</th><th style="width:110px">Actions</th></tr></thead><tbody id="ltb"><tr><td colspan="9" class="empty">Loading...</td></tr></tbody></table></div></div>';
+  +'<div class="tw"><table><thead><tr><th>Ref</th><th>Client</th><th>BU</th><th>Type</th><th>Quote due</th><th>SLA</th><th>Value</th><th>Status</th><th>Actions</th></tr></thead><tbody id="ltb"><tr><td colspan="9" class="empty">Loading...</td></tr></tbody></table></div></div>';
 }
 
 function fLeads(){
@@ -364,7 +364,7 @@ function fLeads(){
   if(!f.length){tb.innerHTML='<tr><td colspan="9" class="empty">No records match</td></tr>';return;}
   tb.innerHTML=f.map(function(l){
     var moveBtn=(l.status==='Quoted'||l.status==='Won')?'<button class="btn btn-won btn-sm" data-id="'+l.id+'" data-action="wonToOrder">&rarr; Order Book</button> ':'';
-    return '<tr><td class="mono">'+l.ref+'</td><td title="'+l.client+'">'+l.client+'</td><td><span class="badge b-bu">'+l.bu+'</span></td><td style="font-size:11px">'+l.type+'</td><td class="mono" style="font-size:11px">'+fd(l.quote_due)+'</td><td>'+sla(l.quote_due,l.status)+'</td><td class="mono">'+(+l.quote_val>0?R(+l.quote_val):'TBD')+'</td><td>'+lbadge(l.status)+'</td><td>'+moveBtn+'<button class="btn-g" data-id="'+l.id+'" data-action="editLead">&#9998;</button><button class="btn-d" data-id="'+l.id+'" data-action="delLead">&#10005;</button></td></tr>';
+    return '<tr><td class="mono">'+l.ref+'</td><td title="'+l.client+'">'+l.client+'</td><td><span class="badge b-bu">'+l.bu+'</span></td><td>'+l.type+'</td><td class="mono">'+fd(l.quote_due)+'</td><td>'+sla(l.quote_due,l.status)+'</td><td class="mono">'+(+l.quote_val>0?R(+l.quote_val):'TBD')+'</td><td>'+lbadge(l.status)+'</td><td>'+moveBtn+'<button class="btn-g" data-id="'+l.id+'" data-action="editLead">&#9998;</button><button class="btn-d" data-id="'+l.id+'" data-action="delLead">&#10005;</button></td></tr>';
   }).join('');
 }
 
@@ -375,7 +375,7 @@ function rOrders(){
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Open orders</div><div class="kpi-v">'+open.length+'</div></div><div class="kpi cgo"><div class="kpi-l">Order book value</div><div class="kpi-v">'+R(openV)+'</div></div><div class="kpi '+(late>0?'cr':'cg')+'"><div class="kpi-l">Overdue</div><div class="kpi-v">'+late+'</div><div class="kpi-s">Past due date</div></div><div class="kpi cg"><div class="kpi-l">Completed</div><div class="kpi-v">'+orders.filter(function(o){return o.status==='Completed';}).length+'</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Order book register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addOrderBtn">+ Add order</button><button class="btn btn-e" id="expOrdersBtn">&#8595; Excel</button></div></div>'
   +'<div class="toolbar"><input type="text" id="os" placeholder="Search..."><select id="obu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="ost"><option value="">All statuses</option><option>Open</option><option>In progress</option><option>Completed</option></select></div>'
-  +'<div class="tw"><table><thead><tr><th style="width:78px">Job #</th><th style="width:110px">Client</th><th style="width:90px">BU</th><th style="width:80px">Value</th><th style="width:70px">Due</th><th style="width:58px">SLA</th><th style="width:32px">JCs</th><th style="width:72px">Status</th><th>Notes</th><th style="width:100px">Actions</th></tr></thead><tbody id="otb"><tr><td colspan="9" class="empty">Loading...</td></tr></tbody></table></div></div>';
+  +'<div class="tw"><table><thead><tr><th>Job #</th><th>Client</th><th>BU</th><th>Value</th><th>Due</th><th>SLA</th><th>JCs</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead><tbody id="otb"><tr><td colspan="10" class="empty">Loading...</td></tr></tbody></table></div></div>';
 }
 
 function fOrders(){
@@ -389,11 +389,11 @@ function fOrders(){
     return true;
   });
   var tb=document.getElementById('otb');if(!tb)return;
-  if(!f.length){tb.innerHTML='<tr><td colspan="9" class="empty">No records match</td></tr>';return;}
+  if(!f.length){tb.innerHTML='<tr><td colspan="10" class="empty">No records match</td></tr>';return;}
   tb.innerHTML=f.map(function(o){
     var slaTd=sla(o.due,o.status);
     var finBtn=o.status==='Completed'?'<button class="btn btn-won btn-sm" data-id="'+o.id+'" data-action="toFinance">&rarr; Finance</button> ':'';
-    return '<tr><td class="mono">'+o.ref+'</td><td title="'+o.client+'">'+o.client+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono" style="font-size:11px">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+( o.job_cards||0)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(o.notes||'—')+'</td><td style="white-space:nowrap">'+finBtn+'<button class="btn-g" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
+    return '<tr><td class="mono">'+o.ref+'</td><td>'+o.client+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+(o.job_cards||0)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(o.notes||'—')+'</td><td style="white-space:nowrap">'+finBtn+'<button class="btn-g" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
   }).join('');
 }
 
@@ -419,7 +419,7 @@ function rSPOrows(){
   });
   if(!f.length)return '<tr><td colspan="9" class="empty">No supplier POs</td></tr>';
   return f.map(function(p){
-    return '<tr><td class="mono">'+p.spref+'</td><td class="mono">'+p.job_ref+'</td><td><span class="badge b-bu">'+p.bu+'</span></td><td style="font-size:11px">'+p.supplier+'</td><td style="white-space:normal;font-size:11px;line-height:1.4">'+p.description+'</td><td class="mono">'+R(+p.amount)+'</td><td class="mono" style="font-size:11px">'+fd(p.ordered)+'</td><td><span class="badge '+(p.received?'b-recv':'b-pend')+'">'+(p.received?'Received':'Pending')+'</span></td><td><button class="btn-g" data-id="'+p.id+'" data-action="togSPO" title="'+(p.received?'Mark pending':'Mark received')+'">'+(p.received?'&#8617;':'&#10003;')+'</button>&nbsp;<button class="btn-g" data-id="'+p.id+'" data-action="editSPO">&#9998;</button>&nbsp;<button class="btn-d" data-id="'+p.id+'" data-action="delSPO">&#10005;</button></td></tr>';
+    return '<tr><td class="mono">'+p.spref+'</td><td class="mono">'+p.job_ref+'</td><td><span class="badge b-bu">'+p.bu+'</span></td><td>'+p.supplier+'</td><td style="white-space:normal;font-size:11px;line-height:1.4">'+p.description+'</td><td class="mono">'+R(+p.amount)+'</td><td class="mono">'+fd(p.ordered)+'</td><td><span class="badge '+(p.received?'b-recv':'b-pend')+'">'+(p.received?'Received':'Pending')+'</span></td><td><button class="btn-g" data-id="'+p.id+'" data-action="togSPO" title="'+(p.received?'Mark pending':'Mark received')+'">'+(p.received?'&#8617;':'&#10003;')+'</button>&nbsp;<button class="btn-g" data-id="'+p.id+'" data-action="editSPO">&#9998;</button>&nbsp;<button class="btn-d" data-id="'+p.id+'" data-action="delSPO">&#10005;</button></td></tr>';
   }).join('');
 }
 
@@ -430,7 +430,7 @@ function rJC(){
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Total job cards</div><div class="kpi-v">'+jcs.length+'</div></div><div class="kpi '+(over>0?'cr':'cg')+'"><div class="kpi-l">Over budget</div><div class="kpi-v">'+over+'</div><div class="kpi-s">Hours or material</div></div><div class="kpi cb"><div class="kpi-l">Budget hours</div><div class="kpi-v">'+totB+'</div></div><div class="kpi '+(totA>totB?'cr':'cg')+'"><div class="kpi-l">Actual hours</div><div class="kpi-v">'+totA+'</div><div class="kpi-s">'+(totA>totB?'+'+(totA-totB)+' over':(totB-totA)+' left')+'</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Job card register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addJCBtn">+ Add job card</button><button class="btn btn-e" id="expJCBtn">&#8595; Excel</button></div></div>'
   +'<div class="toolbar"><input type="text" id="js" placeholder="Search JC ref, MM number, description..."><select id="jbu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="jst"><option value="">All statuses</option><option>Open</option><option>In progress</option><option>Completed</option></select></div>'
-  +'<div class="tw"><table><thead><tr><th style="width:80px">JC ref</th><th style="width:62px">Job #</th><th style="width:90px">BU</th><th style="width:130px">Description</th><th style="width:80px">Assigned</th><th style="width:46px">Bdg Hr</th><th style="width:46px">Act Hr</th><th style="width:50px">Hr Var</th><th style="width:62px">Mat Bdg</th><th style="width:62px">Mat Act</th><th style="width:64px">Mat Var</th><th style="width:70px">Status</th><th class="sticky-col" style="width:80px">Actions</th></tr></thead><tbody id="jtb"><tr><td colspan="13" class="empty">Loading...</td></tr></tbody></table></div></div>';
+  +'<div class="tw"><table><thead><tr><th>JC ref</th><th>Job #</th><th>BU</th><th>Description</th><th>Assigned</th><th>Bdg Hr</th><th>Act Hr</th><th>Hr Var</th><th>Mat Bdg</th><th>Mat Act</th><th>Mat Var</th><th>Status</th><th class="sticky-col">Actions</th></tr></thead><tbody id="jtb"><tr><td colspan="13" class="empty">Loading...</td></tr></tbody></table></div></div>';
 }
 
 function fJCs(){
@@ -447,7 +447,7 @@ function fJCs(){
   tb.innerHTML=f.map(function(j){
     var bH=+j.budget_hrs||0,aH=+j.actual_hrs||0,bM=+j.mat_budget||0,aM=+j.mat_actual||0;
     var hV=aH-bH,mV=aM-bM;
-    return '<tr><td class="mono">'+j.jcref+'</td><td class="mono">'+j.job_ref+'</td><td><span class="badge b-bu">'+j.bu+'</span></td><td style="white-space:normal;font-size:11px;line-height:1.4">'+j.description+'</td><td style="font-size:11px">'+j.assigned+'</td><td class="mono">'+bH+'</td><td class="mono '+(aH>bH?'ob':'')+'">'+aH+'</td><td class="'+(hV>0?'pn':hV<0?'pp':'mono')+'" style="font-size:11px">'+(hV===0?'—':(hV>0?'+':'')+hV)+'</td><td class="mono" style="font-size:11px">'+R(bM)+'</td><td class="mono '+(aM>bM?'ob':'')+'" style="font-size:11px">'+R(aM)+'</td><td class="'+(mV>0?'pn':mV<0?'pp':'mono')+'" style="font-size:11px">'+(mV===0?'—':(mV>0?'+':'')+R(Math.abs(mV)))+'</td><td>'+obadge(j.status)+(aH>bH||aM>bM?' <span style="color:#c53030;font-size:11px">&#9888;</span>':'')+'</td><td class="sticky-col" style="white-space:nowrap"><button class="btn-g" data-id="'+j.id+'" data-action="editJC">&#9998;</button> <button class="btn-d" data-id="'+j.id+'" data-action="delJC">&#10005;</button></td></tr>';
+    return '<tr><td class="mono">'+j.jcref+'</td><td class="mono">'+j.job_ref+'</td><td><span class="badge b-bu">'+j.bu+'</span></td><td style="white-space:normal;font-size:11px;line-height:1.4">'+j.description+'</td><td>'+j.assigned+'</td><td class="mono">'+bH+'</td><td class="mono '+(aH>bH?'ob':'')+'">'+aH+'</td><td class="'+(hV>0?'pn':hV<0?'pp':'mono')+'">'+(hV===0?'—':(hV>0?'+':'')+hV)+'</td><td class="mono">'+R(bM)+'</td><td class="mono '+(aM>bM?'ob':'')+'">'+R(aM)+'</td><td class="'+(mV>0?'pn':mV<0?'pp':'mono')+'">'+(mV===0?'—':(mV>0?'+':'')+R(Math.abs(mV)))+'</td><td>'+obadge(j.status)+(aH>bH||aM>bM?' <span style="color:#c53030;font-size:11px">&#9888;</span>':'')+'</td><td class="sticky-col" style="white-space:nowrap"><button class="btn-g" data-id="'+j.id+'" data-action="editJC">&#9998;</button> <button class="btn-d" data-id="'+j.id+'" data-action="delJC">&#10005;</button></td></tr>';
   }).join('');
 }
 
@@ -459,7 +459,7 @@ function rFin(){
   return '<div class="kpis"><div class="kpi cgo"><div class="kpi-l">Total invoiced</div><div class="kpi-v">'+R(invT)+'</div></div><div class="kpi cn"><div class="kpi-l">Total cost</div><div class="kpi-v">'+R(invC)+'</div></div><div class="kpi '+(prof>0?'cg':'cr')+'"><div class="kpi-l">Gross profit</div><div class="kpi-v">'+R(prof)+'</div></div><div class="kpi '+(mg>20?'cg':mg>10?'ca':'cr')+'"><div class="kpi-l">Gross margin</div><div class="kpi-v">'+mg+'%</div></div><div class="kpi '+(comp.length>0?'ca':'cg')+'"><div class="kpi-l">Ready to invoice</div><div class="kpi-v">'+comp.length+'</div></div></div>'
   +(comp.length>0?'<div class="alert-a">&#9888; '+comp.length+' completed order'+(comp.length>1?'s':'')+' ready — '+comp.map(function(o){return o.ref;}).join(', ')+'<div style="display:flex;gap:6px;flex-wrap:wrap">'+comp.map(function(o){return '<button class="btn btn-sm" data-id="'+o.id+'" data-action="toFinance">&rarr; Invoice '+o.ref+'</button>';}).join('')+'</div></div>':'')
   +'<div class="card"><div class="card-hd"><h3>Invoice register &amp; profitability</h3><div class="card-hd-r"><select id="fbu" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><button class="btn btn-e" id="expFinBtn">&#8595; Excel</button></div></div>'
-  +'<div class="tw"><table><thead><tr><th style="width:98px">Invoice ref</th><th style="width:66px">Job #</th><th style="width:110px">Client</th><th style="width:100px">BU</th><th style="width:76px">Value</th><th style="width:70px">Mat cost</th><th style="width:63px">Labour</th><th style="width:58px">OH</th><th style="width:73px">Profit</th><th style="width:56px">Margin</th><th style="width:76px">Date</th><th style="width:70px">Status</th><th style="width:72px">Actions</th></tr></thead><tbody>'+invs.map(function(i){var p=(+i.order_val||0)-(+i.mat_cost||0)-(+i.labour_cost||0)-(+i.overheads||0);var m=(+i.order_val||0)>0?Math.round(p/(+i.order_val||1)*100):0;return '<tr><td class="mono">'+i.inv_ref+'</td><td class="mono">'+i.job_ref+'</td><td>'+i.client+'</td><td><span class="badge b-bu">'+i.bu+'</span></td><td class="mono">'+R(+i.order_val)+'</td><td class="mono">'+R(+i.mat_cost)+'</td><td class="mono">'+R(+i.labour_cost)+'</td><td class="mono">'+R(+i.overheads)+'</td><td class="'+(p>0?'pp':'pn')+'">'+R(p)+'</td><td><span class="badge '+(m>20?'b-won':'b-lost')+'">'+m+'%</span></td><td class="mono" style="font-size:11px">'+fd(i.invoiced_date)+'</td><td><span class="badge '+(i.status==='Paid'?'b-paid':'b-out')+'">'+i.status+'</span></td><td style="white-space:nowrap"><button class="btn-g" data-id="'+i.id+'" data-action="editInv">&#9998;</button> <button class="btn-d" data-id="'+i.id+'" data-action="delInv">&#10005;</button></td></tr>';}).join('')+(invs.length===0?'<tr><td colspan="13" class="empty">No invoices yet</td></tr>':'')+'</tbody></table></div></div>';
+  +'<div class="tw"><table><thead><tr><th>Invoice ref</th><th>Job #</th><th>Client</th><th>BU</th><th>Value</th><th>Mat cost</th><th>Labour</th><th>OH</th><th>Profit</th><th>Margin</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+invs.map(function(i){var p=(+i.order_val||0)-(+i.mat_cost||0)-(+i.labour_cost||0)-(+i.overheads||0);var m=(+i.order_val||0)>0?Math.round(p/(+i.order_val||1)*100):0;return '<tr><td class="mono">'+i.inv_ref+'</td><td class="mono">'+i.job_ref+'</td><td>'+i.client+'</td><td><span class="badge b-bu">'+i.bu+'</span></td><td class="mono">'+R(+i.order_val)+'</td><td class="mono">'+R(+i.mat_cost)+'</td><td class="mono">'+R(+i.labour_cost)+'</td><td class="mono">'+R(+i.overheads)+'</td><td class="'+(p>0?'pp':'pn')+'">'+R(p)+'</td><td><span class="badge '+(m>20?'b-won':'b-lost')+'">'+m+'%</span></td><td class="mono">'+fd(i.invoiced_date)+'</td><td><span class="badge '+(i.status==='Paid'?'b-paid':'b-out')+'">'+i.status+'</span></td><td style="white-space:nowrap"><button class="btn-g" data-id="'+i.id+'" data-action="editInv">&#9998;</button> <button class="btn-d" data-id="'+i.id+'" data-action="delInv">&#10005;</button></td></tr>';}).join('')+(invs.length===0?'<tr><td colspan="13" class="empty">No invoices yet</td></tr>':'')+'</tbody></table></div></div>';
 }
 
 function wonToOrder(id){
@@ -716,7 +716,8 @@ document.addEventListener('input',function(e){
   if(el.id==='bs'){var tb=document.getElementById('btb');if(tb)tb.innerHTML=rSPOrows();}
 });
 
-
+function getOpenOrders(){return orders.filter(function(o){return !o.invoiced&&o.status!=='Completed';});}
+function autoJCRef(jobRef){if(!jobRef)return 'JC-001';var existing=jcs.filter(function(j){return j.job_ref===jobRef;});return jobRef+'-JC'+String(existing.length+1).padStart(2,'0');}
 
 window.onload=function(){
   var s=null;try{s=sessionStorage.getItem('mm');}catch(e){}
