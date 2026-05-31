@@ -24,7 +24,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .lbtn:hover{background:var(--navy2)}
 .lerr{background:var(--red-bg);border:1px solid #fed7d7;color:var(--red);border-radius:var(--r);padding:9px 12px;font-size:12px;margin-top:10px;display:none;text-align:left}
 #app{display:none}
-.wrap{max-width:100%;margin:0 auto;padding:14px}
+.wrap{max-width:1600px;margin:0 auto;padding:14px}
 .hdr{background:var(--navy);display:flex;align-items:stretch;min-height:56px;border-radius:10px 10px 0 0;overflow:hidden}
 .hdr-brand{background:var(--navy2);padding:0 18px;display:flex;align-items:center;gap:11px;border-right:1px solid rgba(255,255,255,.07)}
 .hdr-logo{width:36px;height:36px;object-fit:contain;border-radius:4px}
@@ -78,7 +78,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .sticky-col{position:sticky;right:0;background:#fff;box-shadow:-2px 0 4px rgba(0,0,0,.06)}
 tr:hover .sticky-col{background:#f8fafc}
 table{width:100%;border-collapse:collapse;font-size:12px;table-layout:auto}
-.tw table{min-width:1300px}
+.tw table{min-width:900px}
 th{text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;padding:10px 16px;border-bottom:1px solid var(--border);background:#fafbfc;white-space:nowrap}
 td{padding:10px 16px;border-bottom:1px solid #f0f2f5;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
 tr:last-child td{border-bottom:none}
@@ -558,12 +558,120 @@ function oOrder(id){
 
 function oSPO(){
   var nr='SPO-'+String(spos.length+1).padStart(3,'0');
-  openM('<div class="mtitle">New supplier PO</div>'
-  +'<div class="f2"><div class="mfr"><label>SPO ref</label><input id="mSr" value="'+nr+'"></div><div class="mfr"><label>Job number</label><input id="mSj"></div></div>'
-  +'<div class="f2"><div class="mfr"><label>Business unit</label>'+buS('mSb','')+'</div><div class="mfr"><label>Supplier</label><input id="mSs"></div></div>'
-  +'<div class="mfr"><label>Description</label><textarea id="mSd"></textarea></div>'
-  +'<div class="f2"><div class="mfr"><label>Amount (R)</label><input type="number" id="mSa" value="0"></div><div class="mfr"><label>Date ordered</label><input type="date" id="mSdt" value="'+td()+'"></div></div>'
+  // Step 1: Show entry method selection
+  openM('<div class="mtitle">New Supplier PO</div>'
+  +'<p style="font-size:12px;color:#718096;margin-bottom:18px">How would you like to capture this PO?</p>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">'
+  +'<button id="spoManualBtn" style="padding:18px 12px;border:2px solid var(--border);border-radius:10px;background:#fff;cursor:pointer;font-family:\'DM Sans\',sans-serif;transition:border-color .2s">'
+  +'<div style="font-size:22px;margin-bottom:8px">✏️</div>'
+  +'<div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:4px">Manual Entry</div>'
+  +'<div style="font-size:11px;color:#718096">Fill in the form fields yourself</div>'
+  +'</button>'
+  +'<button id="spoPDFBtn" style="padding:18px 12px;border:2px solid var(--border);border-radius:10px;background:#fff;cursor:pointer;font-family:\'DM Sans\',sans-serif;transition:border-color .2s">'
+  +'<div style="font-size:22px;margin-bottom:8px">📄</div>'
+  +'<div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:4px">Upload PDF</div>'
+  +'<div style="font-size:11px;color:#718096">AI reads your PO and auto-fills</div>'
+  +'</button>'
+  +'</div>'
+  +'<div class="mfoot"><button class="btn" id="cancelSPO">Cancel</button></div>');
+
+  document.getElementById('cancelSPO').addEventListener('click',closeM);
+
+  // Manual entry path
+  document.getElementById('spoManualBtn').addEventListener('click',function(){
+    oSPOForm({spref:nr,job_ref:'',bu:'',supplier:'',description:'',amount:0,ordered:td()});
+  });
+
+  // PDF upload path
+  document.getElementById('spoPDFBtn').addEventListener('click',function(){
+    closeM();
+    openM('<div class="mtitle">Upload Supplier PO — PDF</div>'
+    +'<div id="spoDropZone" style="border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:border-color .2s;margin-bottom:14px">'
+    +'<div style="font-size:32px;margin-bottom:10px">📄</div>'
+    +'<div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:4px">Click to select PO PDF</div>'
+    +'<div style="font-size:11px;color:#718096">Claude AI will read the document and auto-populate the form</div>'
+    +'<input type="file" id="spoPDFInput" accept=".pdf" style="display:none">'
+    +'</div>'
+    +'<div id="spoAIStatus" style="display:none;background:#f4f6f9;border-radius:8px;padding:12px;font-size:12px;color:#718096;text-align:center;margin-bottom:14px">'
+    +'<span id="spoAIMsg">Reading PDF...</span>'
+    +'</div>'
+    +'<div class="mfoot"><button class="btn" id="cancelSPOPDF">Cancel</button></div>');
+
+    document.getElementById('cancelSPOPDF').addEventListener('click',closeM);
+
+    var dz=document.getElementById('spoDropZone');
+    var fi=document.getElementById('spoPDFInput');
+
+    dz.addEventListener('click',function(){fi.click();});
+    dz.addEventListener('dragover',function(e){e.preventDefault();dz.style.borderColor='var(--navy)';});
+    dz.addEventListener('dragleave',function(){dz.style.borderColor='var(--border)';});
+    dz.addEventListener('drop',function(e){e.preventDefault();dz.style.borderColor='var(--border)';if(e.dataTransfer.files[0])processPDFPO(e.dataTransfer.files[0]);});
+    fi.addEventListener('change',function(){if(fi.files[0])processPDFPO(fi.files[0]);});
+  });
+}
+
+function processPDFPO(file){
+  var status=document.getElementById('spoAIStatus');
+  var msg=document.getElementById('spoAIMsg');
+  if(!status||!msg)return;
+  status.style.display='block';
+  msg.textContent='📖 Reading your PDF...';
+
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var b64=e.target.result.split(',')[1];
+    msg.textContent='🤖 Claude AI is extracting PO details...';
+
+    var prompt='You are reading a supplier Purchase Order PDF for an engineering company called Mine Minerals Supplies & Services in South Africa. Extract the following fields and return ONLY a valid JSON object with no markdown, no explanation, just raw JSON:\n{\n  "spref": "PO number/reference",\n  "job_ref": "MM job reference number (look for MM followed by numbers)",\n  "supplier": "supplier company name",\n  "description": "brief summary of items ordered (max 120 chars)",\n  "amount": excl_total_as_number_no_currency,\n  "ordered": "date in YYYY-MM-DD format"\n}\nIf a field is not found use empty string or 0 for amount. The amount must be the EXCL (excluding VAT) total as a plain number.';
+
+    fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        messages:[{role:'user',content:[
+          {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},
+          {type:'text',text:prompt}
+        ]}]
+      })
+    })
+    .then(function(r){return r.json();})
+    .then(function(data){
+      var txt='';
+      if(data.content&&data.content[0]&&data.content[0].text){txt=data.content[0].text.trim();}
+      // Strip any markdown fences
+      txt=txt.replace(/```json/g,'').replace(/```/g,'').trim();
+      var parsed={spref:'SPO-'+String(spos.length+1).padStart(3,'0'),job_ref:'',bu:'',supplier:'',description:'',amount:0,ordered:td()};
+      try{
+        var ex=JSON.parse(txt);
+        if(ex.spref)parsed.spref=ex.spref;
+        if(ex.job_ref)parsed.job_ref=ex.job_ref;
+        if(ex.supplier)parsed.supplier=ex.supplier;
+        if(ex.description)parsed.description=ex.description;
+        if(ex.amount)parsed.amount=parseFloat(ex.amount)||0;
+        if(ex.ordered&&ex.ordered.match(/^\d{4}-\d{2}-\d{2}$/))parsed.ordered=ex.ordered;
+      }catch(e){toast('Could not parse PDF — please check fields','e');}
+      closeM();
+      oSPOForm(parsed,true);
+    })
+    .catch(function(e){
+      msg.textContent='❌ Error reading PDF: '+e.message;
+      toast('PDF read failed','e');
+    });
+  };
+  reader.readAsDataURL(file);
+}
+
+function oSPOForm(d,fromPDF){
+  openM('<div class="mtitle">New Supplier PO'+(fromPDF?' <span style="background:#f0fff4;color:#276749;border:1px solid #c6f6d5;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;margin-left:8px">✓ AI Auto-filled</span>':'')+'</div>'
+  +(fromPDF?'<div style="background:#f0fff4;border:1px solid #c6f6d5;border-radius:6px;padding:9px 12px;font-size:11px;color:#276749;margin-bottom:14px">✓ Fields populated from PDF — please review before saving</div>':'')
+  +'<div class="f2"><div class="mfr"><label>SPO ref</label><input id="mSr" value="'+(d.spref||'')+'"></div><div class="mfr"><label>Job number (MM ref)</label><input id="mSj" value="'+(d.job_ref||'')+'"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Business unit</label>'+buS('mSb',d.bu||'')+'</div><div class="mfr"><label>Supplier</label><input id="mSs" value="'+(d.supplier||'')+'"></div></div>'
+  +'<div class="mfr"><label>Description</label><textarea id="mSd">'+(d.description||'')+'</textarea></div>'
+  +'<div class="f2"><div class="mfr"><label>Excl. Amount (R)</label><input type="number" id="mSa" value="'+(d.amount||0)+'"></div><div class="mfr"><label>Date ordered</label><input type="date" id="mSdt" value="'+(d.ordered||td())+'"></div></div>'
   +'<div class="mfoot"><button class="btn" id="cancelSPO">Cancel</button><button class="btn btn-p" id="saveSPO">Save PO</button></div>');
+
   document.getElementById('cancelSPO').addEventListener('click',closeM);
   document.getElementById('saveSPO').addEventListener('click',function(){
     dbPost('supplier_pos',{spref:gv('mSr'),job_ref:gv('mSj'),bu:gv('mSb'),supplier:gv('mSs'),description:gv('mSd'),amount:+gv('mSa')||0,ordered:fmtD(gv('mSdt')),received:false})
