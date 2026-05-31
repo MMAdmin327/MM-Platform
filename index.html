@@ -639,7 +639,7 @@ function processPDFPO(file){
 
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'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'},
+      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'REPLACE_WITH_YOUR_API_KEY'},
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
         max_tokens:1000,
@@ -655,7 +655,7 @@ function processPDFPO(file){
       if(jm)txt=jm[0];
       var parsed={spref:'SPO-'+String(spos.length+1).padStart(3,'0'),job_ref:'',bu:'',supplier:'',description:'',amount:0,ordered:td()};
       var success=false;
-      alert('DEBUG RAW: '+txt.substring(0,300));
+      alert('DEBUG RAW: '+JSON.stringify(data).substring(0,400));
       try{
         var ex=JSON.parse(txt);
         if(ex.spref&&ex.spref.indexOf('PO number')<0)parsed.spref=ex.spref;
