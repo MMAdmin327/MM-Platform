@@ -647,8 +647,9 @@ function processPDFPO(file){
     var m2=txt.match(/REFERENCE[:\s]+(MM\d+)/i)||txt.match(/\b(MM\d{3,})\b/);
     if(m2)parsed.job_ref=m2[1].trim();
 
-    // Supplier name — appears between SERVICES and VAT NO on MM POs
-    var m3=txt.match(/SERVICES\s+([A-Z][A-Z\s&]*?)\s+(?:VAT|SUPPLIER)/)||txt.match(/\bTO\b\s+([A-Z][A-Z0-9\s&]{2,30}?)\s+VAT/);
+    // Supplier name — on MM POs appears between SERVICES and VAT NO: (supplier side)
+    var m3=txt.match(/SERVICES\s+([A-Z][A-Z\s&]{2,30}?)\s+SUPPLIER\s+VAT/);
+    if(!m3)m3=txt.match(/AND\s+SERVICES\s+([A-Z][A-Z\s&]{2,30}?)\s+VAT/);
     if(m3)parsed.supplier=m3[1].trim();
 
     // Date
