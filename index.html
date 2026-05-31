@@ -634,7 +634,6 @@ function processPDFPO(file){
     }));
   }).then(function(pageTexts){
     var pdfText=pageTexts.join('\n');
-    alert('PDF TEXT EXTRACTED (first 300 chars): '+pdfText.substring(0,300));
     msg.textContent='🤖 Claude AI is extracting PO details...';
     var prompt='You are reading a supplier Purchase Order for Mine Minerals Supplies & Services in South Africa. Here is the extracted text from the PO:\n\n'+pdfText+'\n\nExtract the following and return ONLY a raw JSON object, no markdown, no explanation:\n{"spref":"PO reference number","job_ref":"MM job number (MM followed by digits)","supplier":"supplier name","description":"brief summary of items max 120 chars","amount":excl_total_number,"ordered":"YYYY-MM-DD"}\nThe amount must be the Total Exclusive (excl VAT) as a plain number. If not found use 0.';
 
@@ -649,6 +648,7 @@ function processPDFPO(file){
     })
     .then(function(r){return r.json();})
     .then(function(data){
+      alert('API RESPONSE: '+JSON.stringify(data).substring(0,500));
       var txt='';
       if(data.content&&data.content[0]&&data.content[0].text){txt=data.content[0].text.trim();}
       txt=txt.replace(/```json/gi,'').replace(/```/g,'').trim();
