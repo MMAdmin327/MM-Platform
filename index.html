@@ -648,7 +648,7 @@ function processPDFPO(file){
     if(m2)parsed.job_ref=m2[1].trim();
 
     // Supplier name - text after TO
-    var m3=txt.match(/\bTO\b\s+([A-Z][A-Z\s&]{3,40}?)(?:\s+VAT|\s+SUPPLIER|\s+POSTAL|\s+PHYSICAL)/);
+    var m3=txt.match(/\bTO\b\s+([A-Z][A-Z0-9\s&\.]{2,40}?)(?:\s+VAT|\s+SUPPLIER|\s+POSTAL|\s+PHYSICAL)/)||txt.match(/TO\s+([A-Z][A-Z0-9\s&]{2,30})\s/);
     if(m3)parsed.supplier=m3[1].trim();
 
     // Date
