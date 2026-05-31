@@ -626,7 +626,7 @@ function processPDFPO(file){
 
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-            headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'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'},
+      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'REPLACE_WITH_YOUR_API_KEY'},
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
         max_tokens:1000,
@@ -640,20 +640,23 @@ function processPDFPO(file){
     .then(function(data){
       var txt='';
       if(data.content&&data.content[0]&&data.content[0].text){txt=data.content[0].text.trim();}
-      // Strip any markdown fences
-      txt=txt.replace(/```json/g,'').replace(/```/g,'').trim();
+      txt=txt.replace(/```json/gi,'').replace(/```/g,'').trim();
+      var jm=txt.match(/\{[\s\S]*\}/);
+      if(jm)txt=jm[0];
       var parsed={spref:'SPO-'+String(spos.length+1).padStart(3,'0'),job_ref:'',bu:'',supplier:'',description:'',amount:0,ordered:td()};
+      var success=false;
       try{
         var ex=JSON.parse(txt);
-        if(ex.spref)parsed.spref=ex.spref;
-        if(ex.job_ref)parsed.job_ref=ex.job_ref;
-        if(ex.supplier)parsed.supplier=ex.supplier;
-        if(ex.description)parsed.description=ex.description;
-        if(ex.amount)parsed.amount=parseFloat(ex.amount)||0;
-        if(ex.ordered&&ex.ordered.match(/^\d{4}-\d{2}-\d{2}$/))parsed.ordered=ex.ordered;
-      }catch(e){toast('Could not parse PDF — please check fields','e');}
+        if(ex.spref&&ex.spref.indexOf('PO number')<0)parsed.spref=ex.spref;
+        if(ex.job_ref&&ex.job_ref.indexOf('MM job')<0)parsed.job_ref=ex.job_ref;
+        if(ex.supplier&&ex.supplier.indexOf('supplier company')<0)parsed.supplier=ex.supplier;
+        if(ex.description&&ex.description.indexOf('brief summary')<0)parsed.description=ex.description;
+        if(ex.amount){var av=parseFloat(String(ex.amount).replace(/[^0-9.]/g,''));if(av>0)parsed.amount=av;}
+        if(ex.ordered){var dm=String(ex.ordered).match(/\d{4}-\d{2}-\d{2}/);if(dm)parsed.ordered=dm[0];}
+        success=true;
+      }catch(e){console.error('PDF parse error:',e.message,'raw:',txt);}
       closeM();
-      oSPOForm(parsed,true);
+      oSPOForm(parsed,success);
     })
     .catch(function(e){
       msg.textContent='❌ Error reading PDF: '+e.message;
