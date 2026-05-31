@@ -211,7 +211,7 @@ function dbDel(t,q){
 
 function loadAll(){
   sync(true,'Loading...');
-  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('job_cards'),dbGet('invoices'),dbGet('labour_rates')]).then(function(res){
+  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('job_cards'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];})]).then(function(res){
     leads=res[0];orders=res[1];spos=res[2];jcs=res[3];invs=res[4];lrates=res[5]||[];
     sync(false,'Live');
   }).catch(function(e){sync(false,'Error',true);toast('Load error: '+e.message,'e');});
@@ -641,7 +641,7 @@ function processPDFPO(file){
 
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'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'},
+      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'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'},
       body:JSON.stringify({
         model:'claude-haiku-4-5-20251001',
         max_tokens:2000,
