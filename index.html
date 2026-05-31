@@ -634,12 +634,13 @@ function processPDFPO(file){
     }));
   }).then(function(pageTexts){
     var pdfText=pageTexts.join('\n');
+    alert('PDF TEXT EXTRACTED (first 300 chars): '+pdfText.substring(0,300));
     msg.textContent='🤖 Claude AI is extracting PO details...';
     var prompt='You are reading a supplier Purchase Order for Mine Minerals Supplies & Services in South Africa. Here is the extracted text from the PO:\n\n'+pdfText+'\n\nExtract the following and return ONLY a raw JSON object, no markdown, no explanation:\n{"spref":"PO reference number","job_ref":"MM job number (MM followed by digits)","supplier":"supplier name","description":"brief summary of items max 120 chars","amount":excl_total_number,"ordered":"YYYY-MM-DD"}\nThe amount must be the Total Exclusive (excl VAT) as a plain number. If not found use 0.';
 
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'REPLACE_WITH_YOUR_API_KEY'},
+      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'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'},
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
         max_tokens:1000,
@@ -655,7 +656,7 @@ function processPDFPO(file){
       if(jm)txt=jm[0];
       var parsed={spref:'SPO-'+String(spos.length+1).padStart(3,'0'),job_ref:'',bu:'',supplier:'',description:'',amount:0,ordered:td()};
       var success=false;
-      alert('DEBUG RAW: '+JSON.stringify(data).substring(0,400));
+
       try{
         var ex=JSON.parse(txt);
         if(ex.spref&&ex.spref.indexOf('PO number')<0)parsed.spref=ex.spref;
