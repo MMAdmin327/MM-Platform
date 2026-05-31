@@ -168,6 +168,7 @@ tr:hover td{background:#f8fafc}
     <button class="nbtn" data-tab="buyer"><span class="npip"></span>Buyer Sheet</button>
     <button class="nbtn" data-tab="jc"><span class="npip"></span>Job Cards</button>
     <button class="nbtn" data-tab="fin"><span class="npip"></span>Finance</button>
+    <button class="nbtn" data-tab="lrates"><span class="npip"></span>Labour Rates</button>
   </div>
   <div class="body" id="body"><div class="empty">Loading...</div></div>
 </div>
@@ -186,7 +187,7 @@ var USERS=[
   {u:'finance',p:'MM@Fin2026',name:'Finance',role:'Finance'},
   {u:'buyer',p:'MM@Buy2026',name:'Buyer',role:'Buyer'}
 ];
-var leads=[],orders=[],spos=[],jcs=[],invs=[],cUser=null;
+var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],cUser=null;
 
 function dbGet(t,q){
   var url=SB+'/rest/v1/'+t+'?order=created_at.desc'+(q?'&'+q:'');
@@ -210,8 +211,8 @@ function dbDel(t,q){
 
 function loadAll(){
   sync(true,'Loading...');
-  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('job_cards'),dbGet('invoices')]).then(function(res){
-    leads=res[0];orders=res[1];spos=res[2];jcs=res[3];invs=res[4];
+  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('job_cards'),dbGet('invoices'),dbGet('labour_rates')]).then(function(res){
+    leads=res[0];orders=res[1];spos=res[2];jcs=res[3];invs=res[4];lrates=res[5]||[];
     sync(false,'Live');
   }).catch(function(e){sync(false,'Error',true);toast('Load error: '+e.message,'e');});
 }
@@ -313,7 +314,7 @@ function xlx(data,cols,file,sheet){
 }
 
 function go(tab){
-  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,jc:rJC,fin:rFin};
+  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,jc:rJC,fin:rFin,lrates:rLRates};
   var body=document.getElementById('body');
   body.innerHTML=renders[tab]?renders[tab]():'';
   if(tab==='leads')setTimeout(fLeads,0);
@@ -788,18 +789,200 @@ function expFin(){
   'MM_Finance.xlsx','Finance');
 }
 
+
+// ── LABOUR RATES ─────────────────────────────────────────────────────────────
+function rLRates(){
+  var canView=cUser&&(cUser.role==='CEO'||cUser.role==='Finance');
+  if(!canView)return '<div class="empty">Access restricted — CEO and Finance only.</div>';
+  var tot=lrates.filter(function(r){return r.active;}).length;
+  return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Active employees</div><div class="kpi-v">'+tot+'</div></div><div class="kpi cgo"><div class="kpi-l">Avg rate</div><div class="kpi-v">'+R(lrates.filter(function(r){return r.active;}).reduce(function(s,r){return s+(+r.rate||0);},0)/Math.max(tot,1))+'</div><div class="kpi-s">Per hour excl</div></div><div class="kpi cb"><div class="kpi-l">Total employees</div><div class="kpi-v">'+lrates.length+'</div></div></div>'
+  +'<div class="card"><div class="card-hd"><h3>Labour rates register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addLRBtn">+ Add employee</button></div></div>'
+  +'<div class="tw"><table><thead><tr><th>Employee name</th><th>Trade / Role</th><th>Business unit</th><th>Rate per hour (R excl)</th><th>Status</th><th>Actions</th></tr></thead><tbody>'
+  +lrates.map(function(r){return '<tr><td style="font-weight:500">'+r.emp_name+'</td><td>'+r.trade+'</td><td><span class="badge b-bu">'+r.bu+'</span></td><td class="mono" style="font-weight:600">'+R(+r.rate)+'</td><td><span class="badge '+(r.active?'b-done':'b-lost')+'">'+(r.active?'Active':'Inactive')+'</span></td><td style="white-space:nowrap"><button class="btn-g" data-id="'+r.id+'" data-action="editLR">&#9998;</button> <button class="btn-d" data-id="'+r.id+'" data-action="delLR">&#10005;</button></td></tr>';}).join('')
+  +(lrates.length===0?'<tr><td colspan="6" class="empty">No employees loaded yet</td></tr>':'')
+  +'</tbody></table></div></div>';
+}
+
+function oLR(id){
+  var r=id?(function(){for(var i=0;i<lrates.length;i++){if(lrates[i].id===id)return lrates[i];}return null;})():{};
+  if(!r)r={};
+  openM('<div class="mtitle">'+(id?'Edit employee rate':'New employee rate')+'</div>'
+  +'<div class="mfr"><label>Employee full name</label><input id="mLRn" value="'+(r.emp_name||'')+'"></div>'
+  +'<div class="f2"><div class="mfr"><label>Trade / Role</label><input id="mLRt" value="'+(r.trade||'')+'"></div><div class="mfr"><label>Business unit</label>'+buS('mLRb',r.bu)+'</div></div>'
+  +'<div class="f2"><div class="mfr"><label>Rate per hour (R excl VAT)</label><input type="number" id="mLRr" value="'+(r.rate||0)+'"></div><div class="mfr"><label>Status</label><select id="mLRs"><option value="true"'+(r.active!==false?' selected':'')+'>Active</option><option value="false"'+(r.active===false?' selected':'')+'>Inactive</option></select></div></div>'
+  +'<div class="mfoot"><button class="btn" id="cancelLR">Cancel</button><button class="btn btn-p" id="saveLR">'+(id?'Update':'Save employee')+'</button></div>');
+  document.getElementById('cancelLR').addEventListener('click',closeM);
+  document.getElementById('saveLR').addEventListener('click',function(){
+    var b={emp_name:gv('mLRn'),trade:gv('mLRt'),bu:gv('mLRb'),rate:+gv('mLRr')||0,active:gv('mLRs')==='true'};
+    var p=id?dbPatch('labour_rates','id=eq.'+id,b):dbPost('labour_rates',b);
+    p.then(function(){closeM();return loadAll();}).then(function(){go('lrates');toast('Saved','s');}).catch(function(e){toast(e.message,'e');});
+  });
+}
+
+// ── UPGRADED JOB CARD FORM ────────────────────────────────────────────────────
+function oJCFull(editId){
+  var j=editId?(function(){for(var i=0;i<jcs.length;i++){if(jcs[i].id===editId)return jcs[i];}return null;})():null;
+  var availOrds=editId?orders:getOpenOrders();
+  var ordOpts=availOrds.map(function(o){return '<option value="'+o.ref+'"'+(j&&j.job_ref===o.ref?' selected':'')+'>'+o.ref+' — '+o.client+'</option>';}).join('');
+  if(!ordOpts)ordOpts='<option value="">No open orders available</option>';
+  var initJob=j?j.job_ref:(availOrds.length?availOrds[0].ref:'');
+  var initBU=j?j.bu:(availOrds.length?availOrds[0].bu:'');
+  var initRef=j?j.jcref:autoJCRef(initJob);
+  // Build employee dropdowns from labour rates
+  var empOpts='<option value="">Select employee...</option>'+lrates.filter(function(r){return r.active;}).map(function(r){return '<option value="'+r.emp_name+'">'+r.emp_name+' ('+r.trade+') — '+R(+r.rate)+'/hr</option>';}).join('');
+  // Labour rows — 10 rows
+  var labRows='';
+  var labData=j&&j.labour_data?JSON.parse(j.labour_data):[];
+  for(var i=0;i<10;i++){
+    var ld=labData[i]||{emp:'',trade:'',mon:0,tue:0,wed:0,thu:0,fri:0,sat:0};
+    labRows+='<tr><td><select class="lab-emp" data-row="'+i+'" style="width:100%;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px"><option value="">—</option>'+lrates.filter(function(r){return r.active;}).map(function(r){return '<option value="'+r.emp_name+'"'+(ld.emp===r.emp_name?' selected':'')+'>'+r.emp_name+'</option>';}).join('')+'</select></td>'
+    +'<td><input type="number" class="lab-mon" data-row="'+i+'" value="'+(ld.mon||0)+'" style="width:38px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0" max="24"></td>'
+    +'<td><input type="number" class="lab-tue" data-row="'+i+'" value="'+(ld.tue||0)+'" style="width:38px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0" max="24"></td>'
+    +'<td><input type="number" class="lab-wed" data-row="'+i+'" value="'+(ld.wed||0)+'" style="width:38px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0" max="24"></td>'
+    +'<td><input type="number" class="lab-thu" data-row="'+i+'" value="'+(ld.thu||0)+'" style="width:38px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0" max="24"></td>'
+    +'<td><input type="number" class="lab-fri" data-row="'+i+'" value="'+(ld.fri||0)+'" style="width:38px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0" max="24"></td>'
+    +'<td><input type="number" class="lab-sat" data-row="'+i+'" value="'+(ld.sat||0)+'" style="width:38px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0" max="24"></td>'
+    +'<td class="mono" id="labTot'+i+'" style="font-size:11px;text-align:center;font-weight:600">0</td></tr>';
+  }
+  // Standing time rows — 5 rows
+  var stRows='';
+  var stData=j&&j.standing_data?JSON.parse(j.standing_data):[];
+  for(var k=0;k<5;k++){
+    var sd=stData[k]||{emp:'',reason:'',mon:0,tue:0,wed:0,thu:0,fri:0,sat:0};
+    stRows+='<tr><td><select class="st-emp" style="width:100%;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px"><option value="">—</option>'+lrates.filter(function(r){return r.active;}).map(function(r){return '<option value="'+r.emp_name+'"'+(sd.emp===r.emp_name?' selected':'')+'>'+r.emp_name+'</option>';}).join('')+'</select></td>'
+    +'<td><input type="text" class="st-rsn" value="'+(sd.reason||'')+'" placeholder="Reason" style="width:90px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px"></td>'
+    +'<td><input type="number" class="st-mon" value="'+(sd.mon||0)+'" style="width:38px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0" max="24"></td>'
+    +'<td><input type="number" class="st-tue" value="'+(sd.tue||0)+'" style="width:38px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0" max="24"></td>'
+    +'<td><input type="number" class="st-wed" value="'+(sd.wed||0)+'" style="width:38px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0" max="24"></td>'
+    +'<td><input type="number" class="st-thu" value="'+(sd.thu||0)+'" style="width:38px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0" max="24"></td>'
+    +'<td><input type="number" class="st-fri" value="'+(sd.fri||0)+'" style="width:38px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0" max="24"></td>'
+    +'<td><input type="number" class="st-sat" value="'+(sd.sat||0)+'" style="width:38px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0" max="24"></td></tr>';
+  }
+  // Material rows — 10 rows
+  var matRows='';
+  var matData=j&&j.mat_data?JSON.parse(j.mat_data):[];
+  for(var m=0;m<10;m++){
+    var md=matData[m]||{desc:'',qty:0,unit:'',cost:0};
+    matRows+='<tr><td style="width:30px;color:#a0aec0;font-size:11px;text-align:center">'+(m+1)+'</td>'
+    +'<td><input type="text" class="mat-desc" value="'+(md.desc||'')+'" style="width:100%;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px"></td>'
+    +'<td><input type="number" class="mat-qty" value="'+(md.qty||0)+'" style="width:50px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'<td><input type="text" class="mat-unit" value="'+(md.unit||'')+'" placeholder="kg/m/ea" style="width:50px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center"></td>'
+    +'<td><input type="number" class="mat-cost" value="'+(md.cost||0)+'" style="width:70px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:right" min="0"></td>'
+    +'<td class="mono" id="matTot'+m+'" style="font-size:11px;text-align:right;font-weight:600">R 0</td></tr>';
+  }
+
+  openM('<div class="mtitle">'+(editId?'Edit job card':'New job card — Daily Capture')+'</div>'
+  // Job Info
+  +'<div class="mfr"><label>Order number (MM ref)</label><select id="mJj" onchange="onJCOrderChange()"><option value="">Select order...</option>'+ordOpts+'</select></div>'
+  +'<div class="f2"><div class="mfr"><label>JC ref</label><input id="mJr" value="'+initRef+'"></div><div class="mfr"><label>Business unit</label><input id="mJb" value="'+initBU+'" readonly style="background:#f4f6f9"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Foreman</label><input id="mJfm" value="'+(j?j.foreman||'':'')+'"></div><div class="mfr"><label>Priority</label><select id="mJpri"><option'+(j&&j.priority==='High'?' selected':'')+'>High</option><option'+((!j||j.priority==='Normal')?' selected':'')+'>Normal</option><option'+(j&&j.priority==='Low'?' selected':'')+'>Low</option></select></div></div>'
+  +'<div class="mfr"><label>Description</label><input id="mJd" value="'+(j?j.description||'':'')+'"></div>'
+  // Material Cost section
+  +'<div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.07em;border-bottom:2px solid var(--navy);padding-bottom:4px">3. Material Cost</div>'
+  +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);width:30px">#</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:left">Description</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center">Qty</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center">Unit</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:right">Unit Cost</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:right">Total</th></tr></thead><tbody id="matBody">'+matRows+'</tbody><tfoot><tr><td colspan="5" style="padding:6px 5px;font-weight:700;text-align:right;font-size:11px">TOTAL MATERIAL COST:</td><td id="matGrandTotal" style="padding:6px 5px;font-weight:700;font-family:'DM Mono',monospace;text-align:right;color:var(--navy)">R 0</td></tr></tfoot></table></div>'
+  +'<div class="f2" style="margin-top:8px"><div class="mfr"><label>Material budget (R)</label><input type="number" id="mJmb" value="'+(j?j.mat_budget||0:0)+'"></div><div class="mfr"><label>Material actual (R) — auto from above</label><input type="number" id="mJma" value="'+(j?j.mat_actual||0:0)+'" style="background:#f4f6f9" readonly></div></div>'
+  // Labour Hours section
+  +'<div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.07em;border-bottom:2px solid var(--navy);padding-bottom:4px">4. Labour Hours</div>'
+  +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:left;min-width:120px">Employee</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:42px">Mon</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:42px">Tue</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:42px">Wed</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:42px">Thu</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:42px">Fri</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:42px">Sat</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:42px">Total</th></tr></thead><tbody id="labBody">'+labRows+'</tbody><tfoot><tr><td style="padding:6px 5px;font-weight:700;font-size:11px">TOTAL HOURS:</td><td colspan="6"></td><td id="labGrandTotal" style="padding:6px 5px;font-weight:700;font-family:'DM Mono',monospace;text-align:center;color:var(--navy)">0</td></tr></tfoot></table></div>'
+  +'<div class="f2" style="margin-top:8px"><div class="mfr"><label>Budget hours</label><input type="number" id="mJbh" value="'+(j?j.budget_hrs||0:0)+'"></div><div class="mfr"><label>Actual hours — auto from above</label><input type="number" id="mJah" value="'+(j?j.actual_hrs||0:0)+'" style="background:#f4f6f9" readonly></div></div>'
+  // Standing Time section
+  +'<div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:#9b1c1c;text-transform:uppercase;letter-spacing:.07em;border-bottom:2px solid #9b1c1c;padding-bottom:4px">5. Standing Time</div>'
+  +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:left;min-width:120px">Employee</th><th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:left;min-width:100px">Reason</th><th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:center;width:42px">Mon</th><th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:center;width:42px">Tue</th><th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:center;width:42px">Wed</th><th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:center;width:42px">Thu</th><th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:center;width:42px">Fri</th><th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:center;width:42px">Sat</th></tr></thead><tbody id="stBody">'+stRows+'</tbody></table></div>'
+  // Status and save
+  +'<div class="f2" style="margin-top:12px"><div class="mfr"><label>Status</label><select id="mJs">'+['Open','In progress','Completed'].map(function(s){return '<option'+(j&&j.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div><div class="mfr"><label>Week starting (date)</label><input type="date" id="mJwk" value="'+(j?j.week_start||td():td())+'"></div></div>'
+  +'<div class="mfoot"><button class="btn" id="cancelJC">Cancel</button><button class="btn btn-p" id="saveJC">'+(editId?'Update job card':'Save job card')+'</button></div>');
+
+  // Wire up totals calculators
+  setTimeout(function(){
+    function calcLabRow(i){
+      var days=['mon','tue','wed','thu','fri','sat'];
+      var tot=0;
+      days.forEach(function(d){var el=document.querySelector('.lab-'+d+'[data-row="'+i+'"]');if(el)tot+=(+el.value||0);});
+      var tEl=document.getElementById('labTot'+i);if(tEl)tEl.textContent=tot;
+      calcLabTotal();
+    }
+    function calcLabTotal(){
+      var total=0;
+      for(var i=0;i<10;i++){var el=document.getElementById('labTot'+i);if(el)total+=(+el.textContent||0);}
+      var gt=document.getElementById('labGrandTotal');if(gt)gt.textContent=total;
+      var ah=document.getElementById('mJah');if(ah)ah.value=total;
+    }
+    function calcMatRow(m){
+      var qty=+(document.querySelectorAll('.mat-qty')[m]||{}).value||0;
+      var cost=+(document.querySelectorAll('.mat-cost')[m]||{}).value||0;
+      var tot=qty*cost;
+      var tEl=document.getElementById('matTot'+m);if(tEl)tEl.textContent='R '+Math.round(tot).toLocaleString('en-ZA');
+      calcMatTotal();
+    }
+    function calcMatTotal(){
+      var total=0;
+      for(var m=0;m<10;m++){var qty=+(document.querySelectorAll('.mat-qty')[m]||{}).value||0;var cost=+(document.querySelectorAll('.mat-cost')[m]||{}).value||0;total+=qty*cost;}
+      var gt=document.getElementById('matGrandTotal');if(gt)gt.textContent='R '+Math.round(total).toLocaleString('en-ZA');
+      var ma=document.getElementById('mJma');if(ma)ma.value=Math.round(total);
+    }
+    // Init totals
+    for(var i=0;i<10;i++){calcLabRow(i);}
+    for(var m=0;m<10;m++){calcMatRow(m);}
+    // Event listeners
+    document.querySelectorAll('.lab-mon,.lab-tue,.lab-wed,.lab-thu,.lab-fri,.lab-sat').forEach(function(el){
+      el.addEventListener('input',function(){calcLabRow(+this.getAttribute('data-row'));});
+    });
+    document.querySelectorAll('.mat-qty,.mat-cost').forEach(function(el,idx){
+      el.addEventListener('input',function(){calcMatRow(Math.floor(idx/2));});
+    });
+
+    document.getElementById('cancelJC').addEventListener('click',closeM);
+    document.getElementById('saveJC').addEventListener('click',function(){
+      var jobRef=gv('mJj');
+      if(!jobRef){toast('Please select an order','e');return;}
+      var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===jobRef){ord=orders[i];break;}}
+      // Collect labour data
+      var labArr=[];
+      for(var i=0;i<10;i++){
+        var emp=document.querySelectorAll('.lab-emp')[i];
+        if(emp&&emp.value){
+          labArr.push({emp:emp.value,mon:+(document.querySelectorAll('.lab-mon')[i]||{}).value||0,tue:+(document.querySelectorAll('.lab-tue')[i]||{}).value||0,wed:+(document.querySelectorAll('.lab-wed')[i]||{}).value||0,thu:+(document.querySelectorAll('.lab-thu')[i]||{}).value||0,fri:+(document.querySelectorAll('.lab-fri')[i]||{}).value||0,sat:+(document.querySelectorAll('.lab-sat')[i]||{}).value||0});
+        }
+      }
+      // Collect standing time
+      var stArr=[];
+      var stEmps=document.querySelectorAll('.st-emp');
+      var stRsns=document.querySelectorAll('.st-rsn');
+      for(var k=0;k<5;k++){
+        if(stEmps[k]&&stEmps[k].value){
+          stArr.push({emp:stEmps[k].value,reason:stRsns[k]?stRsns[k].value:'',mon:+(document.querySelectorAll('.st-mon')[k]||{}).value||0,tue:+(document.querySelectorAll('.st-tue')[k]||{}).value||0,wed:+(document.querySelectorAll('.st-wed')[k]||{}).value||0,thu:+(document.querySelectorAll('.st-thu')[k]||{}).value||0,fri:+(document.querySelectorAll('.st-fri')[k]||{}).value||0,sat:+(document.querySelectorAll('.st-sat')[k]||{}).value||0});
+        }
+      }
+      // Collect material data
+      var matArr=[];
+      for(var m=0;m<10;m++){
+        var desc=document.querySelectorAll('.mat-desc')[m];
+        if(desc&&desc.value){
+          matArr.push({desc:desc.value,qty:+(document.querySelectorAll('.mat-qty')[m]||{}).value||0,unit:document.querySelectorAll('.mat-unit')[m]?(document.querySelectorAll('.mat-unit')[m].value||''):'',cost:+(document.querySelectorAll('.mat-cost')[m]||{}).value||0});
+        }
+      }
+      var totalActHrs=+gv('mJah')||0;
+      var totalMatActual=+gv('mJma')||0;
+      var data={jcref:gv('mJr'),job_ref:jobRef,bu:ord?ord.bu:gv('mJb'),description:gv('mJd'),foreman:gv('mJfm'),priority:gv('mJpri'),assigned:gv('mJfm'),budget_hrs:+gv('mJbh')||0,actual_hrs:totalActHrs,mat_budget:+gv('mJmb')||0,mat_actual:totalMatActual,status:gv('mJs'),week_start:fmtD(gv('mJwk')),labour_data:JSON.stringify(labArr),standing_data:JSON.stringify(stArr),mat_data:JSON.stringify(matArr)};
+      var pr=editId?dbPatch('job_cards','id=eq.'+editId,data):dbPost('job_cards',data);
+      pr.then(function(){closeM();return loadAll();}).then(function(){go('jc');toast(editId?'Job card updated':'Job card saved','s');}).catch(function(e){toast(e.message,'e');});
+    });
+  },100);
+}
+
 document.addEventListener('click',function(e){
   var tid=e.target.id;
   if(tid==='addLeadBtn'){oLead(null);return;}
   if(tid==='addOrderBtn'){oOrder(null);return;}
   if(tid==='addSPOBtn'){oSPO(null);return;}
-  if(tid==='addJCBtn'){oJC(null);return;}
+  if(tid==='addJCBtn'){oJCFull(null);return;}
   if(tid==='expLeadsBtn'){expLeads();return;}
   if(tid==='expOrdersBtn'){expOrders();return;}
   if(tid==='expBuyerBtn'){expBuyer();return;}
   if(tid==='expJCBtn'){expJC();return;}
   if(tid==='expFinBtn'){expFin();return;}
   if(tid==='refreshBtn'){loadAll().then(function(){go('dash');});return;}
+  if(tid==='addLRBtn'){oLR(null);return;}
   var el=e.target.closest('[data-action]');
   if(!el)return;
   var action=el.getAttribute('data-action');
@@ -813,14 +996,16 @@ document.addEventListener('click',function(e){
   if(action==='togSPO'){var p=null;for(var i=0;i<spos.length;i++){if(spos[i].id===id){p=spos[i];break;}}if(p)dbPatch('supplier_pos','id=eq.'+id,{received:!p.received}).then(function(){return loadAll();}).then(function(){go('buyer');toast('Updated','s');});}
   if(action==='editSPO')oSPO(id);
   if(action==='delSPO')cfm('Delete PO','Permanently delete?',function(){dbDel('supplier_pos','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('buyer');toast('Deleted','s');});});
-  if(action==='editJC')oJC(id);
+  if(action==='editJC')oJCFull(id);
   if(action==='delJC')cfm('Delete job card','Permanently delete?',function(){dbDel('job_cards','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('jc');toast('Deleted','s');});});
   if(action==='editInv')oInv(id);
+  if(action==='editLR')oLR(id);
+  if(action==='delLR')cfm('Delete employee','Remove this employee rate?',function(){dbDel('labour_rates','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('lrates');toast('Deleted','s');});});
   if(action==='delInv')cfm('Delete invoice','Permanently delete?',function(){dbDel('invoices','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('fin');toast('Deleted','s');});});
   if(action==='addLead')oLead(null);
   if(action==='addOrder')oOrder(null);
   if(action==='addSPO')oSPO();
-  if(action==='addJC')oJC();
+  if(action==='addJC')oJCFull();
   if(action==='expLeads')expLeads();
   if(action==='expOrders')expOrders();
   if(action==='expBuyer')expBuyer();
