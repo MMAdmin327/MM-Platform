@@ -158,6 +158,7 @@ tr:hover td{background:#f8fafc}
     <div class="hdr-right">
       <div style="display:flex;align-items:center;gap:5px"><div class="sdot" id="sdot"></div><span class="slbl" id="slbl">Ready</span></div>
       <div><div class="hdr-uname" id="uname">-</div><div class="hdr-urole" id="urole">-</div></div>
+      <button class="btn-out" id="apiKeyBtn" title="Set Anthropic API Key">🔑 API Key</button>
       <button class="btn-out" id="logoutBtn">Sign out</button>
     </div>
   </div>
@@ -639,9 +640,11 @@ function processPDFPO(file){
     msg.textContent='🤖 Claude AI is extracting PO details...';
     var prompt='You are reading a supplier Purchase Order for Mine Minerals Supplies & Services in South Africa. Here is the extracted text from the PO:\n\n'+pdfText+'\n\nExtract the following and return ONLY a raw JSON object, no markdown, no explanation:\n{"spref":"PO reference number","job_ref":"MM job number (MM followed by digits)","supplier":"supplier name","description":"brief summary of items max 120 chars","amount":excl_total_number,"ordered":"YYYY-MM-DD"}\nThe amount must be the Total Exclusive (excl VAT) as a plain number. If not found use 0.';
 
+    var storedKey=localStorage.getItem('mm_anthropic_key')||'';
+    if(!storedKey){alert('Please set your Anthropic API key in Settings (top right menu).');return;}
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'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'},
+      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':storedKey},
       body:JSON.stringify({
         model:'claude-haiku-4-5-20251001',
         max_tokens:2000,
@@ -970,6 +973,23 @@ function oJCFull(editId){
   },100);
 }
 
+function oAPIKey(){
+  var cur=localStorage.getItem('mm_anthropic_key')||'';
+  openM('<div class="mtitle">🔑 Anthropic API Key</div>'
+  +'<p style="font-size:12px;color:#718096;margin-bottom:14px">Enter your Anthropic API key. It is stored only in this browser and never sent anywhere except Anthropic.</p>'
+  +'<div class="mfr"><label>API Key (starts with sk-ant-...)</label><input id="apiKeyInput" type="password" value="'+cur+'" placeholder="sk-ant-api03-..." style="font-family:monospace;font-size:11px"></div>'
+  +(cur?'<p style="font-size:11px;color:#276749;margin-bottom:8px">✓ Key is set</p>':'<p style="font-size:11px;color:#c53030;margin-bottom:8px">⚠ No key set — PDF upload will not work</p>')
+  +'<div class="mfoot"><button class="btn" id="cancelAPIKey">Cancel</button><button class="btn btn-p" id="saveAPIKey">Save key</button></div>');
+  document.getElementById('cancelAPIKey').addEventListener('click',closeM);
+  document.getElementById('saveAPIKey').addEventListener('click',function(){
+    var k=document.getElementById('apiKeyInput').value.trim();
+    if(!k){toast('Please enter a key','e');return;}
+    localStorage.setItem('mm_anthropic_key',k);
+    closeM();
+    toast('API key saved — PDF upload ready','s');
+  });
+}
+
 document.addEventListener('click',function(e){
   var tid=e.target.id;
   if(tid==='addLeadBtn'){oLead(null);return;}
@@ -982,6 +1002,7 @@ document.addEventListener('click',function(e){
   if(tid==='expJCBtn'){expJC();return;}
   if(tid==='expFinBtn'){expFin();return;}
   if(tid==='refreshBtn'){loadAll().then(function(){go('dash');});return;}
+  if(tid==='apiKeyBtn'){oAPIKey();return;}
   if(tid==='addLRBtn'){oLR(null);return;}
   var el=e.target.closest('[data-action]');
   if(!el)return;
