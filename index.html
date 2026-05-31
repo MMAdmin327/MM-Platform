@@ -645,6 +645,7 @@ function processPDFPO(file){
       if(jm)txt=jm[0];
       var parsed={spref:'SPO-'+String(spos.length+1).padStart(3,'0'),job_ref:'',bu:'',supplier:'',description:'',amount:0,ordered:td()};
       var success=false;
+      alert('DEBUG RAW: '+txt.substring(0,300));
       try{
         var ex=JSON.parse(txt);
         if(ex.spref&&ex.spref.indexOf('PO number')<0)parsed.spref=ex.spref;
@@ -654,7 +655,7 @@ function processPDFPO(file){
         if(ex.amount){var av=parseFloat(String(ex.amount).replace(/[^0-9.]/g,''));if(av>0)parsed.amount=av;}
         if(ex.ordered){var dm=String(ex.ordered).match(/\d{4}-\d{2}-\d{2}/);if(dm)parsed.ordered=dm[0];}
         success=true;
-      }catch(e){console.error('PDF parse error:',e.message,'raw:',txt);}
+      }catch(e){alert('PARSE ERROR: '+e.message+' RAW: '+txt.substring(0,200));}
       closeM();
       oSPOForm(parsed,success);
     })
