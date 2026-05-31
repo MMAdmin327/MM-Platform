@@ -646,9 +646,11 @@ function processPDFPO(file){
         messages:[{role:'user',content:[{type:'text',text:prompt}]}]
       })
     })
-    .then(function(r){return r.json();})
-    .then(function(data){
-      alert('API RESPONSE: '+JSON.stringify(data).substring(0,500));
+    .then(function(r){return r.text();})
+    .then(function(rawText){
+      alert('RAW HTTP RESPONSE: '+rawText.substring(0,600));
+      var data={};
+      try{data=JSON.parse(rawText);}catch(e){alert('JSON PARSE FAILED: '+e.message);return;}
       var txt='';
       if(data.content&&data.content[0]&&data.content[0].text){txt=data.content[0].text.trim();}
       txt=txt.replace(/```json/gi,'').replace(/```/g,'').trim();
