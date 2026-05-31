@@ -641,8 +641,8 @@ function processPDFPO(file){
       method:'POST',
       headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'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'},
       body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:1000,
+        model:'claude-haiku-4-5-20251001',
+        max_tokens:2000,
         messages:[{role:'user',content:[{type:'text',text:prompt}]}]
       })
     })
