@@ -466,10 +466,9 @@ function rFin(){
 function wonToOrder(id){
   var l=null;for(var i=0;i<leads.length;i++){if(leads[i].id===id){l=leads[i];break;}}
   if(!l)return;
-  var nr='MM'+String(orders.length+1).padStart(3,'0');
   openM('<div class="mtitle">Move to Order Book</div>'
   +'<p style="font-size:12px;color:#718096;margin-bottom:14px">Review and confirm the order details pulled from the quote.</p>'
-  +'<div class="f2"><div class="mfr"><label>Job number</label><input id="wOr" value="'+nr+'"></div><div class="mfr"><label>Business unit</label>'+buS('wOb',l.bu)+'</div></div>'
+  +'<div class="f2"><div class="mfr"><label>Job number (MM ref — locked)</label><input id="wOr" value="'+(l.ref||'')+'" readonly style="background:#f4f6f9;font-weight:600;color:var(--navy)"></div><div class="mfr"><label>Business unit</label>'+buS('wOb',l.bu)+'</div></div>'
   +'<div class="f2"><div class="mfr"><label>Client</label><input id="wOc" value="'+(l.client||'')+'"></div><div class="mfr"><label>Work type</label><input id="wOt" value="'+(l.type||'')+'"></div></div>'
   +'<div class="mfr"><label>Order value (R) — from quote</label><input type="number" id="wOv" value="'+(l.quote_val||0)+'"></div>'
   +'<div class="f2"><div class="mfr"><label>Date received</label><input type="date" id="wOrec" value="'+td()+'"></div><div class="mfr"><label>Due date</label><input type="date" id="wOd"></div></div>'
@@ -639,7 +638,7 @@ function processPDFPO(file){
 
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'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'},
+      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'REPLACE_WITH_YOUR_API_KEY'},
       body:JSON.stringify({
         model:'claude-haiku-4-5-20251001',
         max_tokens:2000,
