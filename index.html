@@ -6,6 +6,7 @@
 <title>Mine Minerals — Operations Platform</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--navy:#0f1923;--navy2:#1a2a3a;--gold:#c8a45a;--gold2:#e8c47a;--border:#e2e8f0;--bg:#f4f6f9;--surface:#fff;--text:#1a202c;--muted:#718096;--green:#276749;--green-bg:#f0fff4;--amber:#92400e;--amber-bg:#fffbeb;--red:#9b1c1c;--red-bg:#fff5f5;--blue:#1e3a5f;--blue-bg:#ebf4ff;--purple:#44337a;--purple-bg:#faf5ff;--purple-border:#d6bcfa;--r:6px;--rlg:10px}
@@ -617,12 +618,24 @@ function processPDFPO(file){
   status.style.display='block';
   msg.textContent='📖 Reading your PDF...';
 
-  var reader=new FileReader();
-  reader.onload=function(e){
-    var b64=e.target.result.split(',')[1];
+  // Use PDF.js to extract text, then send text to Claude
+  var fileURL=URL.createObjectURL(file);
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  pdfjsLib.getDocument(fileURL).promise.then(function(pdf){
+    var pages=[];
+    var total=pdf.numPages;
+    for(var i=1;i<=total;i++){pages.push(i);}
+    return Promise.all(pages.map(function(n){
+      return pdf.getPage(n).then(function(page){
+        return page.getTextContent().then(function(tc){
+          return tc.items.map(function(it){return it.str;}).join(' ');
+        });
+      });
+    }));
+  }).then(function(pageTexts){
+    var pdfText=pageTexts.join('\n');
     msg.textContent='🤖 Claude AI is extracting PO details...';
-
-    var prompt='You are reading a supplier Purchase Order PDF for an engineering company called Mine Minerals Supplies & Services in South Africa. Extract the following fields and return ONLY a valid JSON object with no markdown, no explanation, just raw JSON:\n{\n  "spref": "PO number/reference",\n  "job_ref": "MM job reference number (look for MM followed by numbers)",\n  "supplier": "supplier company name",\n  "description": "brief summary of items ordered (max 120 chars)",\n  "amount": excl_total_as_number_no_currency,\n  "ordered": "date in YYYY-MM-DD format"\n}\nIf a field is not found use empty string or 0 for amount. The amount must be the EXCL (excluding VAT) total as a plain number.';
+    var prompt='You are reading a supplier Purchase Order for Mine Minerals Supplies & Services in South Africa. Here is the extracted text from the PO:\n\n'+pdfText+'\n\nExtract the following and return ONLY a raw JSON object, no markdown, no explanation:\n{"spref":"PO reference number","job_ref":"MM job number (MM followed by digits)","supplier":"supplier name","description":"brief summary of items max 120 chars","amount":excl_total_number,"ordered":"YYYY-MM-DD"}\nThe amount must be the Total Exclusive (excl VAT) as a plain number. If not found use 0.';
 
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
@@ -630,10 +643,7 @@ function processPDFPO(file){
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
         max_tokens:1000,
-        messages:[{role:'user',content:[
-          {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},
-          {type:'text',text:prompt}
-        ]}]
+        messages:[{role:'user',content:[{type:'text',text:prompt}]}]
       })
     })
     .then(function(r){return r.json();})
@@ -663,8 +673,10 @@ function processPDFPO(file){
       msg.textContent='❌ Error reading PDF: '+e.message;
       toast('PDF read failed','e');
     });
-  };
-  reader.readAsDataURL(file);
+  }).catch(function(e){
+    msg.textContent='❌ Error reading PDF: '+e.message;
+    toast('PDF read failed — try manual entry','e');
+  });
 }
 
 function oSPOForm(d,fromPDF){
