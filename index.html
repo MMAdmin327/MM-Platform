@@ -376,7 +376,7 @@ function rOrders(){
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Open orders</div><div class="kpi-v">'+open.length+'</div></div><div class="kpi cgo"><div class="kpi-l">Order book value</div><div class="kpi-v">'+R(openV)+'</div></div><div class="kpi '+(late>0?'cr':'cg')+'"><div class="kpi-l">Overdue</div><div class="kpi-v">'+late+'</div><div class="kpi-s">Past due date</div></div><div class="kpi cg"><div class="kpi-l">Completed</div><div class="kpi-v">'+orders.filter(function(o){return o.status==='Completed';}).length+'</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Order book register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addOrderBtn">+ Add order</button><button class="btn btn-e" id="expOrdersBtn">&#8595; Excel</button></div></div>'
   +'<div class="toolbar"><input type="text" id="os" placeholder="Search..."><select id="obu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="ost"><option value="">All statuses</option><option>Open</option><option>In progress</option><option>Completed</option></select></div>'
-  +'<div class="tw"><table><thead><tr><th>Job #</th><th>Client</th><th>BU</th><th>Value</th><th>Due</th><th>SLA</th><th>JCs</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead><tbody id="otb"><tr><td colspan="10" class="empty">Loading...</td></tr></tbody></table></div></div>';
+  +'<div class="tw"><table><thead><tr><th>Job #</th><th>Client</th><th>Client PO #</th><th>BU</th><th>Value</th><th>Due</th><th>SLA</th><th>JCs</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead><tbody id="otb"><tr><td colspan="11" class="empty">Loading...</td></tr></tbody></table></div></div>';
 }
 
 function fOrders(){
@@ -390,11 +390,11 @@ function fOrders(){
     return true;
   });
   var tb=document.getElementById('otb');if(!tb)return;
-  if(!f.length){tb.innerHTML='<tr><td colspan="10" class="empty">No records match</td></tr>';return;}
+  if(!f.length){tb.innerHTML='<tr><td colspan="11" class="empty">No records match</td></tr>';return;}
   tb.innerHTML=f.map(function(o){
     var slaTd=sla(o.due,o.status);
     var finBtn=o.status==='Completed'?'<button class="btn btn-won btn-sm" data-id="'+o.id+'" data-action="toFinance">&rarr; Finance</button> ':'';
-    return '<tr><td class="mono">'+o.ref+'</td><td>'+o.client+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+(o.job_cards||0)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(o.notes||'—')+'</td><td style="white-space:nowrap">'+finBtn+'<button class="btn-g" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
+    return '<tr><td class="mono">'+o.ref+'</td><td>'+o.client+'</td><td class="mono" style="font-size:11px">'+(o.client_po||'—')+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+(o.job_cards||0)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(o.notes||'—')+'</td><td style="white-space:nowrap">'+finBtn+'<button class="btn-g" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
   }).join('');
 }
 
@@ -469,14 +469,15 @@ function wonToOrder(id){
   openM('<div class="mtitle">Move to Order Book</div>'
   +'<p style="font-size:12px;color:#718096;margin-bottom:14px">Review and confirm the order details pulled from the quote.</p>'
   +'<div class="f2"><div class="mfr"><label>Job number (MM ref — locked)</label><input id="wOr" value="'+(l.ref||'')+'" readonly style="background:#f4f6f9;font-weight:600;color:var(--navy)"></div><div class="mfr"><label>Business unit</label>'+buS('wOb',l.bu)+'</div></div>'
-  +'<div class="f2"><div class="mfr"><label>Client</label><input id="wOc" value="'+(l.client||'')+'"></div><div class="mfr"><label>Work type</label><input id="wOt" value="'+(l.type||'')+'"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Client</label><input id="wOc" value="'+(l.client||'')+'"></div><div class="mfr"><label>Client PO number</label><input id="wOcpo" value=""></div></div>'
+  +'<div class="mfr"><label>Work type</label><input id="wOt" value="'+(l.type||'')+'"></div>'
   +'<div class="mfr"><label>Order value (R) — from quote</label><input type="number" id="wOv" value="'+(l.quote_val||0)+'"></div>'
   +'<div class="f2"><div class="mfr"><label>Date received</label><input type="date" id="wOrec" value="'+td()+'"></div><div class="mfr"><label>Due date</label><input type="date" id="wOd"></div></div>'
   +'<div class="mfr"><label>Notes</label><textarea id="wOn">'+(l.notes||'')+'</textarea></div>'
   +'<div class="mfoot"><button class="btn" id="cancelWon">Cancel</button><button class="btn btn-p" id="confirmWon">Confirm — move to Order Book</button></div>');
   document.getElementById('cancelWon').addEventListener('click',closeM);
   document.getElementById('confirmWon').addEventListener('click',function(){
-    var order={ref:gv('wOr'),client:gv('wOc'),bu:gv('wOb'),type:gv('wOt'),order_val:+gv('wOv')||0,received:fmtD(gv('wOrec')),due:fmtD(gv('wOd')),status:'Open',job_cards:0,invoiced:false,notes:gv('wOn')};
+    var order={ref:gv('wOr'),client:gv('wOc'),client_po:gv('wOcpo'),bu:gv('wOb'),type:gv('wOt'),order_val:+gv('wOv')||0,received:fmtD(gv('wOrec')),due:fmtD(gv('wOd')),status:'Open',job_cards:0,invoiced:false,notes:gv('wOn')};
     dbPost('orders',order).then(function(){
       return dbPatch('leads','id=eq.'+id,{status:'Moved'});
     }).then(function(){
@@ -543,14 +544,15 @@ function oOrder(id){
   var nr='MM'+String(orders.length+1).padStart(3,'0');
   openM('<div class="mtitle">'+(id?'Edit order':'New order')+'</div>'
   +'<div class="f2"><div class="mfr"><label>Job number</label><input id="mOr" value="'+(o.ref||nr)+'"></div><div class="mfr"><label>Business unit</label>'+buS('mOb',o.bu)+'</div></div>'
-  +'<div class="f2"><div class="mfr"><label>Client</label><input id="mOc" value="'+(o.client||'')+'"></div><div class="mfr"><label>Work type</label><input id="mOt" value="'+(o.type||'')+'"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Client</label><input id="mOc" value="'+(o.client||'')+'"></div><div class="mfr"><label>Client PO number</label><input id="mOcpo" value="'+(o.client_po||'')+'"></div></div>'
+  +'<div class="mfr"><label>Work type</label><input id="mOt" value="'+(o.type||'')+'"></div>'
   +'<div class="f2"><div class="mfr"><label>Order value (R)</label><input type="number" id="mOv" value="'+(o.order_val||0)+'"></div><div class="mfr"><label>Status</label><select id="mOs">'+['Open','In progress','Completed'].map(function(s){return '<option'+(o.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div></div>'
   +'<div class="f2"><div class="mfr"><label>Date received</label><input type="date" id="mOrec" value="'+(o.received||td())+'"></div><div class="mfr"><label>Due date</label><input type="date" id="mOd" value="'+(o.due||'')+'"></div></div>'
   +'<div class="mfr"><label>Notes</label><textarea id="mOn">'+(o.notes||'')+'</textarea></div>'
   +'<div class="mfoot"><button class="btn" id="cancelOrd">Cancel</button><button class="btn btn-p" id="saveOrd">Save order</button></div>');
   document.getElementById('cancelOrd').addEventListener('click',closeM);
   document.getElementById('saveOrd').addEventListener('click',function(){
-    var b={ref:gv('mOr'),client:gv('mOc'),bu:gv('mOb'),type:gv('mOt'),order_val:+gv('mOv')||0,received:fmtD(gv('mOrec')),due:fmtD(gv('mOd')),status:gv('mOs'),job_cards:id?(function(){for(var i=0;i<orders.length;i++){if(orders[i].id===id)return orders[i].job_cards||0;}return 0;})():0,invoiced:false,notes:gv('mOn')};
+    var b={ref:gv('mOr'),client:gv('mOc'),client_po:gv('mOcpo'),bu:gv('mOb'),type:gv('mOt'),order_val:+gv('mOv')||0,received:fmtD(gv('mOrec')),due:fmtD(gv('mOd')),status:gv('mOs'),job_cards:id?(function(){for(var i=0;i<orders.length;i++){if(orders[i].id===id)return orders[i].job_cards||0;}return 0;})():0,invoiced:false,notes:gv('mOn')};
     var p=id?dbPatch('orders','id=eq.'+id,b):dbPost('orders',b);
     p.then(function(){closeM();return loadAll();}).then(function(){go('orders');toast('Order saved','s');}).catch(function(e){toast(e.message,'e');});
   });
@@ -638,7 +640,7 @@ function processPDFPO(file){
 
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'REPLACE_WITH_YOUR_API_KEY'},
+      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true','x-api-key':'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'},
       body:JSON.stringify({
         model:'claude-haiku-4-5-20251001',
         max_tokens:2000,
