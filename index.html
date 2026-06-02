@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mine Minerals — Operations Platform v2</title>
+<title>Mine Minerals — Operations Platform</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -169,6 +169,8 @@ tr:hover td{background:#f8fafc}
     <button class="nbtn" data-tab="buyer"><span class="npip"></span>Buyer Sheet</button>
     <button class="nbtn" data-tab="jc"><span class="npip"></span>Job Cards</button>
     <button class="nbtn" data-tab="fin"><span class="npip"></span>Finance</button>
+    <button class="nbtn" data-tab="wi"><span class="npip"></span>Work Instructions</button>
+    <button class="nbtn" data-tab="jcosting"><span class="npip"></span>Job Costing</button>
     <button class="nbtn" data-tab="lrates"><span class="npip"></span>Labour Rates</button>
   </div>
   <div class="body" id="body"><div class="empty">Loading...</div></div>
@@ -188,7 +190,7 @@ var USERS=[
   {u:'finance',p:'MM@Fin2026',name:'Finance',role:'Finance'},
   {u:'buyer',p:'MM@Buy2026',name:'Buyer',role:'Buyer'}
 ];
-var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],cUser=null;
+var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],cUser=null;
 
 function dbGet(t,q){
   var url=SB+'/rest/v1/'+t+'?order=created_at.desc'+(q?'&'+q:'');
@@ -212,8 +214,8 @@ function dbDel(t,q){
 
 function loadAll(){
   sync(true,'Loading...');
-  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('job_cards'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];})]).then(function(res){
-    leads=res[0];orders=res[1];spos=res[2];jcs=res[3];invs=res[4];lrates=res[5]||[];
+  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('job_cards'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];}),dbGet('work_instructions').catch(function(){return[];})]).then(function(res){
+    leads=res[0];orders=res[1];spos=res[2];jcs=res[3];invs=res[4];lrates=res[5]||[];wis=res[6]||[];
     sync(false,'Live');
   }).catch(function(e){sync(false,'Error',true);toast('Load error: '+e.message,'e');});
 }
@@ -315,7 +317,7 @@ function xlx(data,cols,file,sheet){
 }
 
 function go(tab){
-  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,jc:rJC,fin:rFin,lrates:rLRates};
+  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,jc:rJC,fin:rFin,wi:rWI,jcosting:rJobCosting,lrates:rLRates};
   var body=document.getElementById('body');
   body.innerHTML=renders[tab]?renders[tab]():'';
   if(tab==='leads')setTimeout(fLeads,0);
@@ -396,7 +398,7 @@ function fOrders(){
   tb.innerHTML=f.map(function(o){
     var slaTd=sla(o.due,o.status);
     var finBtn=o.status==='Completed'?'<button class="btn btn-won btn-sm" data-id="'+o.id+'" data-action="toFinance">&rarr; Finance</button> ':'';
-    return '<tr><td class="mono">'+o.ref+'</td><td>'+o.client+'</td><td class="mono" style="font-size:11px">'+(o.client_po||'—')+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+(o.job_cards||0)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(o.notes||'—')+'</td><td style="white-space:nowrap">'+finBtn+'<button class="btn-g" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
+    return '<tr><td class="mono"><button class="btn-g" style="font-family:monospace;font-size:11px;font-weight:600;color:var(--navy);padding:2px 4px" data-id="'+o.id+'" data-action="showJobCost">'+o.ref+'</button></td><td>'+o.client+'</td><td class="mono" style="font-size:11px">'+(o.client_po||'—')+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+(o.job_cards||0)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(o.notes||'—')+'</td><td style="white-space:nowrap">'+finBtn+'<button class="btn-g" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
   }).join('');
 }
 
@@ -497,7 +499,8 @@ function toFinance(id){
   var matCost=linked.reduce(function(s,p){return s+(+p.amount||0);},0);
   var linkedJCs=jcs.filter(function(j){return j.job_ref===o.ref;});
   var labHrs=linkedJCs.reduce(function(s,j){return s+(+j.actual_hrs||0);},0);
-  var labCost=Math.round(labHrs*350);
+  var buRate=BU_RATES[o.bu]||350;
+  var labCost=Math.round(labHrs*buRate);
   var oh=Math.round((+o.order_val||0)*0.08);
   var nr='INV-'+new Date().getFullYear()+'-'+String(invs.length+1).padStart(3,'0');
   openM('<div class="mtitle">Move to Finance</div>'
@@ -534,7 +537,19 @@ function oLead(id){
   +'<div class="mfoot"><button class="btn" id="cancelLead">Cancel</button><button class="btn btn-p" id="saveLead">Save lead</button></div>');
   document.getElementById('cancelLead').addEventListener('click',closeM);
   document.getElementById('saveLead').addEventListener('click',function(){
-    var b={ref:gv('mLr'),client:gv('mLc'),bu:gv('mLb'),type:gv('mLt'),contact:gv('mLct'),received:fmtD(gv('mLrec')),quote_due:fmtD(gv('mLd')),status:gv('mLs'),quote_val:+gv('mLv')||0,notes:gv('mLn')};
+    var newRef=gv('mLr').trim();
+    if(!newRef){toast('Please enter a job reference number','e');return;}
+    // Duplicate MM Number check — only on new leads, not edits
+    if(!id){
+      var dupLead=leads.filter(function(l){return l.ref&&l.ref.trim().toLowerCase()===newRef.toLowerCase()&&l.status!=='Moved';});
+      var dupOrder=orders.filter(function(o){return o.ref&&o.ref.trim().toLowerCase()===newRef.toLowerCase();});
+      if(dupLead.length>0||dupOrder.length>0){
+        toast('⚠ Job number '+newRef+' already exists — please use a unique MM number','e');
+        document.getElementById('mLr').style.border='2px solid #c53030';
+        return;
+      }
+    }
+    var b={ref:newRef,client:gv('mLc'),bu:gv('mLb'),type:gv('mLt'),contact:gv('mLct'),received:fmtD(gv('mLrec')),quote_due:fmtD(gv('mLd')),status:gv('mLs'),quote_val:+gv('mLv')||0,notes:gv('mLn')};
     var p=id?dbPatch('leads','id=eq.'+id,b):dbPost('leads',b);
     p.then(function(){closeM();return loadAll();}).then(function(){go('leads');toast('Lead saved','s');}).catch(function(e){toast(e.message,'e');});
   });
@@ -976,6 +991,479 @@ function oAPIKey(){
   });
 }
 
+// BU Labour Rates
+var BU_RATES={'Fabrication':114.00,'Construction':102.66,'Pumps':207.13,'TMM':105.97,'Motors':60.44,'Wear Protection':73.54,'Mining Supplies':135.02,'Laser Cutting':68.95};
+
+function showJobCost(id){
+  var o=null;for(var i=0;i<orders.length;i++){if(orders[i].id===id){o=orders[i];break;}}
+  if(!o)return;
+
+  // Calculate actuals
+  var matSpent=spos.filter(function(p){return p.job_ref===o.ref;}).reduce(function(s,p){return s+(+p.amount||0);},0);
+  var linkedJCs=jcs.filter(function(j){return j.job_ref===o.ref;});
+  var totalHrs=linkedJCs.reduce(function(s,j){return s+(+j.actual_hrs||0);},0);
+  var buRate=BU_RATES[o.bu]||0;
+  var labSpent=Math.round(totalHrs*buRate);
+  var totalSpent=matSpent+labSpent;
+  var quoteVal=+o.order_val||0;
+  var matBudget=linkedJCs.reduce(function(s,j){return s+(+j.mat_budget||0);},0);
+  var labBudget=linkedJCs.reduce(function(s,j){return s+(+j.budget_hrs||0);},0)*buRate;
+  var totalBudget=matBudget+labBudget||quoteVal;
+
+  // Percentages
+  var matPct=matBudget>0?Math.round(matSpent/matBudget*100):0;
+  var labPct=labBudget>0?Math.round(labSpent/labBudget*100):0;
+  var totPct=totalBudget>0?Math.round(totalSpent/totalBudget*100):0;
+  var margin=quoteVal-totalSpent;
+  var marginPct=quoteVal>0?Math.round(margin/quoteVal*100):0;
+
+  function tl(pct){
+    if(pct>=95)return '<span style="background:#fff5f5;color:#9b1c1c;border:1px solid #fed7d7;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">🔴 OVER BUDGET</span>';
+    if(pct>=75)return '<span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">🟡 WATCH</span>';
+    return '<span style="background:#f0fff4;color:#276749;border:1px solid #c6f6d5;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">🟢 ON TRACK</span>';
+  }
+  function bar(pct){
+    var c=pct>=95?'#e53e3e':pct>=75?'#d69e2e':'#38a169';
+    var w=Math.min(pct,100);
+    return '<div style="background:#f0f2f5;border-radius:4px;height:8px;width:100%;margin-top:4px"><div style="background:'+c+';width:'+w+'%;height:8px;border-radius:4px;transition:width .3s"></div></div>';
+  }
+
+  openM('<div class="mtitle">Job Cost Dashboard — '+o.ref+'</div>'
+  +'<div style="background:#f4f6f9;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;display:flex;gap:20px;flex-wrap:wrap">'
+  +'<span><strong>Client:</strong> '+o.client+'</span>'
+  +'<span><strong>BU:</strong> '+o.bu+'</span>'
+  +'<span><strong>Quote Value:</strong> '+R(quoteVal)+'</span>'
+  +'<span><strong>Labour Rate:</strong> '+R(buRate)+'/hr</span>'
+  +'</div>'
+
+  // Materials row
+  +'<div style="border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px">'
+  +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+  +'<span style="font-weight:600;font-size:13px">Materials</span>'+tl(matPct)+'</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:12px;margin-bottom:6px">'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Budget</div><div class="mono" style="font-size:14px;font-weight:600">'+R(matBudget)+'</div></div>'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Actual Spent</div><div class="mono" style="font-size:14px;font-weight:600;color:'+(matPct>=95?'#c53030':matPct>=75?'#d97706':'#276749')+'">'+R(matSpent)+'</div></div>'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">% Used</div><div class="mono" style="font-size:14px;font-weight:600">'+matPct+'%</div></div>'
+  +'</div>'+bar(matPct)+'</div>'
+
+  // Labour row
+  +'<div style="border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px">'
+  +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+  +'<span style="font-weight:600;font-size:13px">Labour <span style="font-size:11px;color:#718096;font-weight:400">('+totalHrs+' hrs × '+R(buRate)+'/hr)</span></span>'+tl(labPct)+'</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:12px;margin-bottom:6px">'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Budget</div><div class="mono" style="font-size:14px;font-weight:600">'+R(labBudget)+'</div></div>'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Actual Cost</div><div class="mono" style="font-size:14px;font-weight:600;color:'+(labPct>=95?'#c53030':labPct>=75?'#d97706':'#276749')+'">'+R(labSpent)+'</div></div>'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">% Used</div><div class="mono" style="font-size:14px;font-weight:600">'+labPct+'%</div></div>'
+  +'</div>'+bar(labPct)+'</div>'
+
+  // Total & Margin
+  +'<div style="border:2px solid var(--navy);border-radius:8px;padding:14px;margin-bottom:10px;background:#f8fafc">'
+  +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+  +'<span style="font-weight:700;font-size:13px;color:var(--navy)">Total Job Cost</span>'+tl(totPct)+'</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;font-size:12px">'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Total Spent</div><div class="mono" style="font-size:15px;font-weight:700">'+R(totalSpent)+'</div></div>'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Quote Value</div><div class="mono" style="font-size:15px;font-weight:700">'+R(quoteVal)+'</div></div>'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Gross Profit</div><div class="mono" style="font-size:15px;font-weight:700;color:'+(margin>=0?'#276749':'#c53030')+'">'+R(margin)+'</div></div>'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Margin</div><div class="mono" style="font-size:15px;font-weight:700;color:'+(marginPct>=15?'#276749':marginPct>=0?'#d97706':'#c53030')+'">'+marginPct+'%</div></div>'
+  +'</div></div>'
+
+  +'<div style="font-size:11px;color:#718096;margin-bottom:10px">📦 '+spos.filter(function(p){return p.job_ref===o.ref;}).length+' supplier POs on Buyer Sheet &nbsp;|&nbsp; 🔧 '+linkedJCs.length+' job card'+(linkedJCs.length!==1?'s':'')+' linked</div>'
+  +'<div class="mfoot"><button class="btn" id="closeJobCost">Close</button>'+(o.status==='Completed'&&!o.invoiced?'<button class="btn btn-p" data-id="'+o.id+'" data-action="toFinance">&rarr; Move to Finance</button>':'')+'</div>');
+
+  document.getElementById('closeJobCost').addEventListener('click',closeM);
+}
+
+
+// ── LABOUR RATES ─────────────────────────────────────────────────────────────
+function rLRates(){
+  var canView=cUser&&(cUser.role==='CEO'||cUser.role==='Finance');
+  if(!canView)return '<div class="empty">Access restricted — CEO and Finance only.</div>';
+  return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Active employees</div><div class="kpi-v">'+lrates.filter(function(r){return r.active;}).length+'</div></div><div class="kpi cgo"><div class="kpi-l">Total employees</div><div class="kpi-v">'+lrates.length+'</div></div></div>'
+  +'<div class="card"><div class="card-hd"><h3>Employee labour rates</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addLRBtn">+ Add employee</button></div></div>'
+  +'<div class="tw"><table><thead><tr><th>Employee name</th><th>Trade / Role</th><th>Business unit</th><th>Rate per hour (R)</th><th>Status</th><th>Actions</th></tr></thead><tbody>'
+  +lrates.map(function(r){return '<tr><td style="font-weight:500">'+r.emp_name+'</td><td>'+r.trade+'</td><td><span class="badge b-bu">'+r.bu+'</span></td><td class="mono" style="font-weight:600">'+R(+r.rate)+'</td><td><span class="badge '+(r.active?'b-done':'b-lost')+'">'+(r.active?'Active':'Inactive')+'</span></td><td style="white-space:nowrap"><button class="btn-g" data-id="'+r.id+'" data-action="editLR">&#9998;</button> <button class="btn-d" data-id="'+r.id+'" data-action="delLR">&#10005;</button></td></tr>';}).join('')
+  +(lrates.length===0?'<tr><td colspan="6" class="empty">No employees loaded yet — add employees to enable WI labour costing</td></tr>':'')
+  +'</tbody></table></div></div>';
+}
+
+function oLR(id){
+  var r=id?(function(){for(var i=0;i<lrates.length;i++){if(lrates[i].id===id)return lrates[i];}return null;})():{};
+  if(!r)r={};
+  openM('<div class="mtitle">'+(id?'Edit employee rate':'Add employee')+'</div>'
+  +'<div class="mfr"><label>Employee full name</label><input id="mLRn" value="'+(r.emp_name||'')+'"></div>'
+  +'<div class="f2"><div class="mfr"><label>Trade / Role</label><input id="mLRt" value="'+(r.trade||'')+'"></div><div class="mfr"><label>Business unit</label>'+buS('mLRb',r.bu)+'</div></div>'
+  +'<div class="f2"><div class="mfr"><label>Rate per hour (R excl VAT)</label><input type="number" id="mLRr" value="'+(r.rate||0)+'"></div><div class="mfr"><label>Status</label><select id="mLRs"><option value="true"'+(r.active!==false?' selected':'')+'>Active</option><option value="false"'+(r.active===false?' selected':'')+'>Inactive</option></select></div></div>'
+  +'<div class="mfoot"><button class="btn" id="cancelLR">Cancel</button><button class="btn btn-p" id="saveLR">'+(id?'Update employee':'Save employee')+'</button></div>');
+  document.getElementById('cancelLR').addEventListener('click',closeM);
+  document.getElementById('saveLR').addEventListener('click',function(){
+    var n=gv('mLRn').trim();
+    if(!n){toast('Please enter employee name','e');return;}
+    var b={emp_name:n,trade:gv('mLRt'),bu:gv('mLRb'),rate:+gv('mLRr')||0,active:gv('mLRs')==='true'};
+    var p=id?dbPatch('labour_rates','id=eq.'+id,b):dbPost('labour_rates',b);
+    p.then(function(){closeM();return loadAll();}).then(function(){go('lrates');toast('Employee saved','s');}).catch(function(e){toast(e.message,'e');});
+  });
+}
+
+// ── WORK INSTRUCTIONS ────────────────────────────────────────────────────────
+function rWI(){
+  var myWIs=wis;
+  return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Total WIs</div><div class="kpi-v">'+myWIs.length+'</div></div><div class="kpi ca"><div class="kpi-l">In progress</div><div class="kpi-v">'+myWIs.filter(function(w){return w.status==="In progress";}).length+'</div></div><div class="kpi cg"><div class="kpi-l">Completed</div><div class="kpi-v">'+myWIs.filter(function(w){return w.status==="Completed";}).length+'</div></div></div>'
+  +'<div class="card"><div class="card-hd"><h3>Work instruction register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addWIBtn">+ New WI</button></div></div>'
+  +'<div class="toolbar"><input type="text" id="wis" placeholder="Search WI number, MM number, description..."><select id="wibu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="wist"><option value="">All statuses</option><option>Open</option><option>In progress</option><option>Completed</option></select></div>'
+  +'<div class="tw"><table><thead><tr><th>WI Number</th><th>MM Number</th><th>BU</th><th>Description</th><th>Foreman</th><th>Trade</th><th>Start Date</th><th>Target</th><th>Est Hrs</th><th>Act Hrs</th><th>Stand Hrs</th><th>Status</th><th>Actions</th></tr></thead><tbody id="witb">'
+  +rWIRows()+'</tbody></table></div></div>';
+}
+
+function rWIRows(){
+  var s=document.getElementById('wis')?document.getElementById('wis').value.toLowerCase():'';
+  var bu=gv('wibu'),st=gv('wist');
+  var f=wis.filter(function(w){
+    if(s&&(w.wi_ref+w.job_ref+w.description+w.foreman).toLowerCase().indexOf(s)<0)return false;
+    if(bu&&w.bu!==bu)return false;
+    if(st&&w.status!==st)return false;
+    return true;
+  });
+  if(!f.length)return '<tr><td colspan="13" class="empty">No work instructions found</td></tr>';
+  return f.map(function(w){
+    var labData=w.labour_data?JSON.parse(w.labour_data):[];
+    var stData=w.standing_data?JSON.parse(w.standing_data):[];
+    var actHrs=labData.reduce(function(s,e){return s+(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);},0);
+    var stHrs=stData.reduce(function(s,e){return s+(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);},0);
+    return '<tr><td class="mono" style="font-weight:600">'+w.wi_ref+'</td><td class="mono">'+w.job_ref+'</td><td><span class="badge b-bu">'+w.bu+'</span></td><td style="font-size:11px">'+w.description+'</td><td style="font-size:11px">'+w.foreman+'</td><td style="font-size:11px">'+w.trade+'</td><td class="mono" style="font-size:11px">'+fd(w.start_date)+'</td><td class="mono" style="font-size:11px">'+fd(w.target_date)+'</td><td class="mono">'+w.est_hrs+'</td><td class="mono '+(actHrs>w.est_hrs?'ob':'')+'">'+actHrs+'</td><td class="mono '+(stHrs>0?'sla-warn':'')+'">'+stHrs+'</td><td>'+obadge(w.status)+'</td><td style="white-space:nowrap"><button class="btn-g" data-id="'+w.id+'" data-action="editWI">&#9998;</button> <button class="btn-d" data-id="'+w.id+'" data-action="delWI">&#10005;</button></td></tr>';
+  }).join('');
+}
+
+function oWI(editId){
+  var w=editId?(function(){for(var i=0;i<wis.length;i++){if(wis[i].id===editId)return wis[i];}return null;})():null;
+  var availOrds=getOpenOrders();
+
+  // Auto-generate WI number
+  var initJob=w?w.job_ref:(availOrds.length?availOrds[0].ref:'');
+  var autoWIRef=function(jobRef){
+    if(!jobRef)return '';
+    var existing=wis.filter(function(x){return x.job_ref===jobRef;});
+    var nextNum=existing.length+1;
+    return jobRef+'/'+String(nextNum).padStart(2,'0');
+  };
+  var initRef=w?w.wi_ref:autoWIRef(initJob);
+  var initBU=w?w.bu:(availOrds.length?availOrds[0].bu:'');
+
+  var ordOpts=availOrds.map(function(o){return '<option value="'+o.ref+'"'+(w&&w.job_ref===o.ref?' selected':'')+'>'+o.ref+' — '+o.client+'</option>';}).join('');
+
+  // Employee rows for labour
+  var labData=w&&w.labour_data?JSON.parse(w.labour_data):[];
+  var labRows='';
+  for(var i=0;i<12;i++){
+    var ld=labData[i]||{emp:'',mon:0,tue:0,wed:0,thu:0,fri:0,sat:0,kg:0,done:false};
+    var empOpts='<option value="">— Select —</option>'+lrates.filter(function(r){return r.active;}).map(function(r){return '<option value="'+r.emp_name+'"'+(ld.emp===r.emp_name?' selected':'')+'>'+r.emp_name+' ('+r.trade+')</option>';}).join('');
+    labRows+='<tr>'
+    +'<td style="width:20px;color:#a0aec0;font-size:11px;text-align:center">'+(i+1)+'</td>'
+    +'<td><select class="wi-emp" data-row="'+i+'" style="width:100%;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px">'+empOpts+'</select></td>'
+    +'<td><input type="number" class="wi-mon" data-row="'+i+'" value="'+(ld.mon||0)+'" style="width:36px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'<td><input type="number" class="wi-tue" data-row="'+i+'" value="'+(ld.tue||0)+'" style="width:36px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'<td><input type="number" class="wi-wed" data-row="'+i+'" value="'+(ld.wed||0)+'" style="width:36px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'<td><input type="number" class="wi-thu" data-row="'+i+'" value="'+(ld.thu||0)+'" style="width:36px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'<td><input type="number" class="wi-fri" data-row="'+i+'" value="'+(ld.fri||0)+'" style="width:36px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'<td><input type="number" class="wi-sat" data-row="'+i+'" value="'+(ld.sat||0)+'" style="width:36px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'<td><input type="number" class="wi-kg" data-row="'+i+'" value="'+(ld.kg||0)+'" style="width:44px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'<td style="text-align:center"><input type="checkbox" class="wi-done" data-row="'+i+'"'+(ld.done?' checked':'')+' style="width:16px;height:16px;cursor:pointer"></td>'
+    +'<td class="mono" id="wiLabTot'+i+'" style="font-size:11px;text-align:center;font-weight:600;color:var(--navy)">0</td>'
+    +'</tr>';
+  }
+
+  // Standing time rows
+  var stData=w&&w.standing_data?JSON.parse(w.standing_data):[];
+  var stRows='';
+  for(var k=0;k<5;k++){
+    var sd=stData[k]||{emp:'',reason:'',mon:0,tue:0,wed:0,thu:0,fri:0,sat:0};
+    var stEmpOpts='<option value="">— Select —</option>'+lrates.filter(function(r){return r.active;}).map(function(r){return '<option value="'+r.emp_name+'"'+(sd.emp===r.emp_name?' selected':'')+'>'+r.emp_name+'</option>';}).join('');
+    stRows+='<tr>'
+    +'<td><select class="st-emp" style="width:100%;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px">'+stEmpOpts+'</select></td>'
+    +'<td><input type="text" class="st-rsn" value="'+(sd.reason||'')+'" placeholder="Reason" style="width:80px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px"></td>'
+    +'<td><input type="number" class="st-mon" value="'+(sd.mon||0)+'" style="width:36px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'<td><input type="number" class="st-tue" value="'+(sd.tue||0)+'" style="width:36px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'<td><input type="number" class="st-wed" value="'+(sd.wed||0)+'" style="width:36px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'<td><input type="number" class="st-thu" value="'+(sd.thu||0)+'" style="width:36px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'<td><input type="number" class="st-fri" value="'+(sd.fri||0)+'" style="width:36px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'<td><input type="number" class="st-sat" value="'+(sd.sat||0)+'" style="width:36px;font-size:11px;padding:3px;border:1px solid var(--border);border-radius:4px;text-align:center" min="0"></td>'
+    +'</tr>';
+  }
+
+  openM('<div class="mtitle">'+(editId?'Edit Work Instruction':'New Work Instruction')+'</div>'
+  // Job details
+  +'<div class="mfr"><label>MM Number (Order)</label><select id="wiJob" onchange="onWIOrderChange()"><option value="">Select order...</option>'+ordOpts+'</select></div>'
+  +'<div class="f2"><div class="mfr"><label>WI Number (auto)</label><input id="wiRef" value="'+initRef+'"></div><div class="mfr"><label>Business unit</label><input id="wiBU" value="'+initBU+'" readonly style="background:#f4f6f9"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Description / Task</label><input id="wiDesc" value="'+(w?w.description||'':'')+'"></div><div class="mfr"><label>Trade / Skill</label><input id="wiTrade" value="'+(w?w.trade||'':'')+'"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Foreman / Issued by</label><input id="wiForeman" value="'+(w?w.foreman||'':'')+'"></div><div class="mfr"><label>Priority</label><select id="wiPri"><option'+((!w||w.priority==="Normal")?" selected":"")+'>Normal</option><option'+(w&&w.priority==="High"?" selected":"")+'>High</option><option'+(w&&w.priority==="Low"?" selected":"")+'>Low</option></select></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Start date</label><input type="date" id="wiStart" value="'+(w?w.start_date||td():td())+'"></div><div class="mfr"><label>Target completion</label><input type="date" id="wiTarget" value="'+(w?w.target_date||'':'')+'"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Estimated hours</label><input type="number" id="wiEstHrs" value="'+(w?w.est_hrs||0:0)+'"></div><div class="mfr"><label>Status</label><select id="wiStatus">'+['Open','In progress','Completed'].map(function(s){return '<option'+(w&&w.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div></div>'
+  // Labour section
+  +'<div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.07em;border-bottom:2px solid var(--navy);padding-bottom:4px">Labour Hours</div>'
+  +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'
+  +'<th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);width:20px">#</th>'
+  +'<th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:left;min-width:130px">Employee</th>'
+  +'<th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:40px">Mon</th>'
+  +'<th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:40px">Tue</th>'
+  +'<th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:40px">Wed</th>'
+  +'<th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:40px">Thu</th>'
+  +'<th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:40px">Fri</th>'
+  +'<th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:40px">Sat</th>'
+  +'<th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:44px">KG</th>'
+  +'<th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:30px">Done</th>'
+  +'<th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center;width:44px">Total</th>'
+  +'</tr></thead><tbody>'+labRows+'</tbody>'
+  +'<tfoot><tr><td colspan="10" style="padding:6px 5px;font-weight:700;text-align:right;font-size:11px">TOTAL LABOUR HOURS:</td><td id="wiLabGrand" style="padding:6px;font-weight:700;font-family:monospace;text-align:center;color:var(--navy)">0</td></tr></tfoot>'
+  +'</table></div>'
+  // Standing time section
+  +'<div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:#9b1c1c;text-transform:uppercase;letter-spacing:.07em;border-bottom:2px solid #9b1c1c;padding-bottom:4px">Standing Time</div>'
+  +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr>'
+  +'<th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:left;min-width:130px">Employee</th>'
+  +'<th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:left;min-width:80px">Reason</th>'
+  +'<th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:center;width:40px">Mon</th>'
+  +'<th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:center;width:40px">Tue</th>'
+  +'<th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:center;width:40px">Wed</th>'
+  +'<th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:center;width:40px">Thu</th>'
+  +'<th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:center;width:40px">Fri</th>'
+  +'<th style="padding:5px;background:#fff5f5;border-bottom:1px solid var(--border);text-align:center;width:40px">Sat</th>'
+  +'</tr></thead><tbody>'+stRows+'</tbody></table></div>'
+  // Sign off
+  +'<div style="margin:14px 0 6px;font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.07em;border-bottom:2px solid var(--navy);padding-bottom:4px">Sign-off</div>'
+  +'<div class="f2"><div class="mfr"><label>Artisan name</label><input id="wiArtisan" value="'+(w?w.artisan||'':'')+'"></div><div class="mfr"><label>HOD name</label><input id="wiHOD" value="'+(w?w.hod||'':'')+'"></div></div>'
+  +'<div class="mfr"><label>Completion status</label><select id="wiComplete"><option value="Partial"'+(w&&w.complete_status==="Partial"?" selected":"")+'>Partial</option><option value="Yes"'+(w&&w.complete_status==="Yes"?" selected":"")+'>Yes — All complete</option><option value="No"'+(w&&w.complete_status==="No"?" selected":"")+'>No</option></select></div>'
+  +'<div class="mfoot"><button class="btn" id="cancelWI">Cancel</button><button class="btn btn-p" id="saveWI">'+(editId?'Update WI':'Save WI')+'</button></div>');
+
+  // Wire up calculators
+  setTimeout(function(){
+    function calcLabRow(i){
+      var days=['mon','tue','wed','thu','fri','sat'];
+      var tot=0;
+      days.forEach(function(d){var el=document.querySelector('.wi-'+d+'[data-row="'+i+'"]');if(el)tot+=(+el.value||0);});
+      var tEl=document.getElementById('wiLabTot'+i);if(tEl)tEl.textContent=tot;
+      calcLabTotal();
+    }
+    function calcLabTotal(){
+      var total=0;
+      for(var i=0;i<12;i++){var el=document.getElementById('wiLabTot'+i);if(el)total+=(+el.textContent||0);}
+      var gt=document.getElementById('wiLabGrand');if(gt)gt.textContent=total;
+    }
+    for(var i=0;i<12;i++){calcLabRow(i);}
+    document.querySelectorAll('.wi-mon,.wi-tue,.wi-wed,.wi-thu,.wi-fri,.wi-sat').forEach(function(el){
+      el.addEventListener('input',function(){calcLabRow(+this.getAttribute('data-row'));});
+    });
+
+    // WI order change
+    var wiJobEl=document.getElementById('wiJob');
+    if(wiJobEl&&!editId){
+      onWIOrderChange();
+    }
+
+    document.getElementById('cancelWI').addEventListener('click',closeM);
+    document.getElementById('saveWI').addEventListener('click',function(){
+      var jobRef=gv('wiJob');
+      if(!jobRef){toast('Please select an order','e');return;}
+      var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===jobRef){ord=orders[i];break;}}
+      // Collect labour data
+      var labArr=[];
+      var wiEmps=document.querySelectorAll('.wi-emp');
+      for(var i=0;i<12;i++){
+        if(wiEmps[i]&&wiEmps[i].value){
+          labArr.push({
+            emp:wiEmps[i].value,
+            mon:+(document.querySelectorAll('.wi-mon')[i]||{}).value||0,
+            tue:+(document.querySelectorAll('.wi-tue')[i]||{}).value||0,
+            wed:+(document.querySelectorAll('.wi-wed')[i]||{}).value||0,
+            thu:+(document.querySelectorAll('.wi-thu')[i]||{}).value||0,
+            fri:+(document.querySelectorAll('.wi-fri')[i]||{}).value||0,
+            sat:+(document.querySelectorAll('.wi-sat')[i]||{}).value||0,
+            kg:+(document.querySelectorAll('.wi-kg')[i]||{}).value||0,
+            done:!!(document.querySelectorAll('.wi-done')[i]||{}).checked
+          });
+        }
+      }
+      // Collect standing time
+      var stArr=[];
+      var stEmps=document.querySelectorAll('.st-emp');
+      var stRsns=document.querySelectorAll('.st-rsn');
+      for(var k=0;k<5;k++){
+        if(stEmps[k]&&stEmps[k].value){
+          stArr.push({
+            emp:stEmps[k].value,
+            reason:stRsns[k]?stRsns[k].value:'',
+            mon:+(document.querySelectorAll('.st-mon')[k]||{}).value||0,
+            tue:+(document.querySelectorAll('.st-tue')[k]||{}).value||0,
+            wed:+(document.querySelectorAll('.st-wed')[k]||{}).value||0,
+            thu:+(document.querySelectorAll('.st-thu')[k]||{}).value||0,
+            fri:+(document.querySelectorAll('.st-fri')[k]||{}).value||0,
+            sat:+(document.querySelectorAll('.st-sat')[k]||{}).value||0
+          });
+        }
+      }
+      var data={
+        wi_ref:gv('wiRef'),job_ref:jobRef,bu:ord?ord.bu:gv('wiBU'),
+        description:gv('wiDesc'),trade:gv('wiTrade'),foreman:gv('wiForeman'),
+        priority:gv('wiPri'),start_date:fmtD(gv('wiStart')),
+        target_date:fmtD(gv('wiTarget')),est_hrs:+gv('wiEstHrs')||0,
+        status:gv('wiStatus'),artisan:gv('wiArtisan'),hod:gv('wiHOD'),
+        complete_status:gv('wiComplete'),
+        labour_data:JSON.stringify(labArr),
+        standing_data:JSON.stringify(stArr)
+      };
+      var pr=editId?dbPatch('work_instructions','id=eq.'+editId,data):dbPost('work_instructions',data);
+      pr.then(function(){closeM();return loadAll();}).then(function(){go('wi');toast(editId?'WI updated':'WI saved','s');}).catch(function(e){toast(e.message,'e');});
+    });
+  },100);
+}
+
+function onWIOrderChange(){
+  var jobRef=gv('wiJob');
+  var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===jobRef){ord=orders[i];break;}}
+  if(ord){
+    document.getElementById('wiBU').value=ord.bu;
+    var existing=wis.filter(function(x){return x.job_ref===jobRef;});
+    document.getElementById('wiRef').value=jobRef+'/'+String(existing.length+1).padStart(2,'0');
+  }
+}
+
+// ── JOB COSTING (LIVE) ───────────────────────────────────────────────────────
+function rJobCosting(){
+  var openOrds=orders.filter(function(o){return !o.invoiced;});
+  return '<div class="card"><div class="card-hd"><h3>Live job costing — select MM Number</h3></div>'
+  +'<div class="toolbar"><select id="jcostMM" onchange="loadJobCost()" style="min-width:200px"><option value="">Select MM Number...</option>'+openOrds.map(function(o){return '<option value="'+o.id+'">'+o.ref+' — '+o.client+'</option>';}).join('')+'</select></div>'
+  +'<div id="jcostBody" style="padding:17px"><div class="empty">Select an MM Number above to view live job costing</div></div>'
+  +'</div>';
+}
+
+function loadJobCost(){
+  var id=gv('jcostMM');
+  var body=document.getElementById('jcostBody');
+  if(!id||!body){return;}
+  var o=null;for(var i=0;i<orders.length;i++){if(orders[i].id===id){o=orders[i];break;}}
+  if(!o)return;
+
+  // Materials from Buyer Sheet
+  var matSpent=spos.filter(function(p){return p.job_ref===o.ref;}).reduce(function(s,p){return s+(+p.amount||0);},0);
+
+  // Labour from WI forms — per employee × their rate
+  var jobWIs=wis.filter(function(w){return w.job_ref===o.ref;});
+  var labCost=0;
+  var labHrs=0;
+  var labBreakdown=[];
+  var empTotals={};
+  jobWIs.forEach(function(w){
+    var labData=w.labour_data?JSON.parse(w.labour_data):[];
+    labData.forEach(function(e){
+      if(!e.emp)return;
+      var hrs=(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);
+      if(!empTotals[e.emp])empTotals[e.emp]=0;
+      empTotals[e.emp]+=hrs;
+    });
+  });
+  Object.keys(empTotals).forEach(function(empName){
+    var rate=0;
+    for(var i=0;i<lrates.length;i++){if(lrates[i].emp_name===empName){rate=+lrates[i].rate||0;break;}}
+    var hrs=empTotals[empName];
+    var cost=hrs*rate;
+    labHrs+=hrs;
+    labCost+=cost;
+    labBreakdown.push({emp:empName,hrs:hrs,rate:rate,cost:cost});
+  });
+
+  // Standing time cost — per employee × their rate
+  var stCost=0;
+  var stHrs=0;
+  var stBreakdown=[];
+  var stEmpTotals={};
+  jobWIs.forEach(function(w){
+    var stData=w.standing_data?JSON.parse(w.standing_data):[];
+    stData.forEach(function(e){
+      if(!e.emp)return;
+      var hrs=(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);
+      if(!stEmpTotals[e.emp])stEmpTotals[e.emp]={hrs:0,reason:e.reason};
+      stEmpTotals[e.emp].hrs+=hrs;
+    });
+  });
+  Object.keys(stEmpTotals).forEach(function(empName){
+    var rate=0;
+    for(var i=0;i<lrates.length;i++){if(lrates[i].emp_name===empName){rate=+lrates[i].rate||0;break;}}
+    var hrs=stEmpTotals[empName].hrs;
+    var cost=hrs*rate;
+    stHrs+=hrs;
+    stCost+=cost;
+    stBreakdown.push({emp:empName,hrs:hrs,rate:rate,cost:cost,reason:stEmpTotals[empName].reason});
+  });
+
+  var totalCost=matSpent+labCost+stCost;
+  var quoteVal=+o.order_val||0;
+  var grossProfit=quoteVal-totalCost;
+  var margin=quoteVal>0?Math.round(grossProfit/quoteVal*100):0;
+
+  function tl(pct){
+    if(pct>=95)return '<span style="background:#fff5f5;color:#9b1c1c;border:1px solid #fed7d7;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">🔴 CRITICAL</span>';
+    if(pct>=75)return '<span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">🟡 WATCH</span>';
+    return '<span style="background:#f0fff4;color:#276749;border:1px solid #c6f6d5;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">🟢 ON TRACK</span>';
+  }
+
+  var matPct=quoteVal>0?Math.round(matSpent/quoteVal*100):0;
+  var labPct=quoteVal>0?Math.round(labCost/quoteVal*100):0;
+  var stPct=quoteVal>0?Math.round(stCost/quoteVal*100):0;
+  var totPct=quoteVal>0?Math.round(totalCost/quoteVal*100):0;
+
+  body.innerHTML=
+  // Header
+  '<div style="background:#f4f6f9;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;gap:24px;flex-wrap:wrap;font-size:12px">'
+  +'<span><strong>Client:</strong> '+o.client+'</span>'
+  +'<span><strong>BU:</strong> '+o.bu+'</span>'
+  +'<span><strong>Status:</strong> '+o.status+'</span>'
+  +'<span><strong>Quote Value:</strong> <strong style="color:var(--navy)">'+R(quoteVal)+'</strong></span>'
+  +'<span><strong>WIs:</strong> '+jobWIs.length+'</span>'
+  +'</div>'
+
+  // KPI tiles
+  +'<div class="kpis" style="margin-bottom:16px">'
+  +'<div class="kpi cgo"><div class="kpi-l">Quote value</div><div class="kpi-v">'+R(quoteVal)+'</div></div>'
+  +'<div class="kpi cn"><div class="kpi-l">Total cost</div><div class="kpi-v">'+R(totalCost)+'</div><div class="kpi-s">'+totPct+'% of quote</div></div>'
+  +'<div class="kpi '+(grossProfit>=0?'cg':'cr')+'"><div class="kpi-l">Gross profit</div><div class="kpi-v">'+R(grossProfit)+'</div></div>'
+  +'<div class="kpi '+(margin>=15?'cg':margin>=0?'ca':'cr')+'"><div class="kpi-l">Margin</div><div class="kpi-v">'+margin+'%</div></div>'
+  +'</div>'
+
+  // Materials
+  +'<div style="border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px">'
+  +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+  +'<span style="font-weight:700;font-size:13px">📦 Materials</span>'+tl(matPct)+'</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:12px">'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Buyer Sheet Total</div><div class="mono" style="font-size:16px;font-weight:700">'+R(matSpent)+'</div><div style="font-size:10px;color:#718096">'+spos.filter(function(p){return p.job_ref===o.ref;}).length+' supplier POs</div></div>'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">% of Quote</div><div class="mono" style="font-size:16px;font-weight:700">'+matPct+'%</div></div>'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Remaining</div><div class="mono" style="font-size:16px;font-weight:700">'+R(quoteVal-matSpent)+'</div></div>'
+  +'</div></div>'
+
+  // Labour
+  +'<div style="border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px">'
+  +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+  +'<span style="font-weight:700;font-size:13px">🔧 Labour ('+labHrs+' hrs)</span>'+tl(labPct)+'</div>'
+  +(labBreakdown.length>0?'<div style="overflow-x:auto;margin-bottom:10px"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:left">Employee</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:center">Hours</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:right">Rate/hr</th><th style="padding:5px;background:#fafbfc;border-bottom:1px solid var(--border);text-align:right">Cost</th></tr></thead><tbody>'+labBreakdown.map(function(e){return '<tr><td style="padding:5px;font-weight:500">'+e.emp+'</td><td style="padding:5px;text-align:center;font-family:monospace">'+e.hrs+'</td><td style="padding:5px;text-align:right;font-family:monospace">'+R(e.rate)+'</td><td style="padding:5px;text-align:right;font-family:monospace;font-weight:600">'+R(e.cost)+'</td></tr>';}).join('')+'<tr style="background:#f4f6f9"><td style="padding:5px;font-weight:700">TOTAL</td><td style="padding:5px;text-align:center;font-family:monospace;font-weight:700">'+labHrs+'</td><td></td><td style="padding:5px;text-align:right;font-family:monospace;font-weight:700">'+R(labCost)+'</td></tr></tbody></table></div>':'<div style="color:#a0aec0;font-size:12px;margin-bottom:10px">No WI labour entries yet</div>')
+  +'</div>'
+
+  // Standing time
+  +(stHrs>0?'<div style="border:1px solid #fed7d7;border-radius:8px;padding:14px;margin-bottom:10px;background:#fff5f5">'
+  +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+  +'<span style="font-weight:700;font-size:13px;color:#9b1c1c">⚠ Standing Time ('+stHrs+' hrs)</span></div>'
+  +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="padding:5px;background:#fff5f5;border-bottom:1px solid #fed7d7;text-align:left">Employee</th><th style="padding:5px;background:#fff5f5;border-bottom:1px solid #fed7d7;text-align:left">Reason</th><th style="padding:5px;background:#fff5f5;border-bottom:1px solid #fed7d7;text-align:center">Hours</th><th style="padding:5px;background:#fff5f5;border-bottom:1px solid #fed7d7;text-align:right">Cost</th></tr></thead><tbody>'+stBreakdown.map(function(e){return '<tr><td style="padding:5px;font-weight:500">'+e.emp+'</td><td style="padding:5px;color:#718096">'+e.reason+'</td><td style="padding:5px;text-align:center;font-family:monospace">'+e.hrs+'</td><td style="padding:5px;text-align:right;font-family:monospace;font-weight:600;color:#c53030">'+R(e.cost)+'</td></tr>';}).join('')+'</tbody></table></div>'
+  +'</div>':'')
+
+  // Profit summary
+  +'<div style="border:2px solid var(--navy);border-radius:8px;padding:16px;background:#f8fafc">'
+  +'<div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:12px">Profit Summary</div>'
+  +'<table style="width:100%;font-size:12px;border-collapse:collapse">'
+  +'<tr><td style="padding:5px 0">Quote / Contract Value</td><td style="text-align:right;font-family:monospace;font-weight:600">'+R(quoteVal)+'</td></tr>'
+  +'<tr><td style="padding:5px 0;color:#718096">Less: Material Cost</td><td style="text-align:right;font-family:monospace;color:#718096">− '+R(matSpent)+'</td></tr>'
+  +'<tr><td style="padding:5px 0;color:#718096">Less: Labour Cost</td><td style="text-align:right;font-family:monospace;color:#718096">− '+R(labCost)+'</td></tr>'
+  +(stCost>0?'<tr><td style="padding:5px 0;color:#c53030">Less: Standing Time Cost</td><td style="text-align:right;font-family:monospace;color:#c53030">− '+R(stCost)+'</td></tr>':'')
+  +'<tr style="border-top:2px solid var(--navy)"><td style="padding:8px 0;font-weight:700;font-size:14px">GROSS PROFIT</td><td style="text-align:right;font-family:monospace;font-weight:700;font-size:14px;color:'+(grossProfit>=0?'#276749':'#c53030')+'">'+R(grossProfit)+'</td></tr>'
+  +'<tr><td style="padding:3px 0;color:#718096">Profit Margin</td><td style="text-align:right;font-family:monospace;font-weight:600;color:'+(margin>=15?'#276749':margin>=0?'#d97706':'#c53030')+'">'+margin+'%</td></tr>'
+  +'<tr><td style="padding:3px 0;color:#718096">Job Status</td><td style="text-align:right;font-weight:600;color:'+(grossProfit>=0?'#276749':'#c53030')+'">'+(grossProfit>0?'Profitable':grossProfit===0?'Break-Even':'Loss')+'</td></tr>'
+  +'</table></div>';
+}
+
 document.addEventListener('click',function(e){
   var tid=e.target.id;
   if(tid==='addLeadBtn'){oLead(null);return;}
@@ -990,11 +1478,14 @@ document.addEventListener('click',function(e){
   if(tid==='refreshBtn'){loadAll().then(function(){go('dash');});return;}
   if(tid==='apiKeyBtn'){oAPIKey();return;}
   if(tid==='addLRBtn'){oLR(null);return;}
+  if(tid==='addWIBtn'){oWI(null);return;}
+  if(tid==='addLRBtn'){oLR(null);return;}
   var el=e.target.closest('[data-action]');
   if(!el)return;
   var action=el.getAttribute('data-action');
   var id=el.getAttribute('data-id');
   if(action==='wonToOrder')wonToOrder(id);
+  if(action==='showJobCost')showJobCost(id);
   if(action==='toFinance')toFinance(id);
   if(action==='editLead')oLead(id);
   if(action==='delLead')cfm('Delete lead','Permanently delete this lead?',function(){dbDel('leads','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('leads');toast('Deleted','s');});});
@@ -1006,6 +1497,10 @@ document.addEventListener('click',function(e){
   if(action==='editJC')oJCFull(id);
   if(action==='delJC')cfm('Delete job card','Permanently delete?',function(){dbDel('job_cards','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('jc');toast('Deleted','s');});});
   if(action==='editInv')oInv(id);
+  if(action==='editLR')oLR(id);
+  if(action==='delLR')cfm('Delete employee','Remove this employee?',function(){dbDel('labour_rates','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('lrates');toast('Deleted','s');});});
+  if(action==='editWI')oWI(id);
+  if(action==='delWI')cfm('Delete WI','Permanently delete this work instruction?',function(){dbDel('work_instructions','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('wi');toast('Deleted','s');});});
   if(action==='editLR')oLR(id);
   if(action==='delLR')cfm('Delete employee','Remove this employee rate?',function(){dbDel('labour_rates','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('lrates');toast('Deleted','s');});});
   if(action==='delInv')cfm('Delete invoice','Permanently delete?',function(){dbDel('invoices','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('fin');toast('Deleted','s');});});
@@ -1027,6 +1522,7 @@ document.addEventListener('change',function(e){
   if(el.id==='os'||el.id==='obu'||el.id==='ost')fOrders();
   if(el.id==='jbu'||el.id==='jst')fJCs();
   if(el.id==='bbu'||el.id==='bst'){var tb=document.getElementById('btb');if(tb)tb.innerHTML=rSPOrows();}
+  if(el.id==='wibu'||el.id==='wist'){var wtb=document.getElementById('witb');if(wtb)wtb.innerHTML=rWIRows();}
 });
 document.addEventListener('input',function(e){
   var el=e.target;
@@ -1034,6 +1530,7 @@ document.addEventListener('input',function(e){
   if(el.id==='os')fOrders();
   if(el.id==='js')fJCs();
   if(el.id==='bs'){var tb=document.getElementById('btb');if(tb)tb.innerHTML=rSPOrows();}
+  if(el.id==='wis'){var wtb=document.getElementById('witb');if(wtb)wtb.innerHTML=rWIRows();}
 });
 
 function getOpenOrders(){return orders.filter(function(o){return !o.invoiced&&o.status!=='Completed';});}
