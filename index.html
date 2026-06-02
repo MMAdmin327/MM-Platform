@@ -1464,6 +1464,20 @@ function loadJobCost(){
   +'</table></div>';
 }
 
+function oSPOEditForm(id,p){
+  openM('<div class="mtitle">Edit Supplier PO</div>'
+  +'<div class="f2"><div class="mfr"><label>SPO ref</label><input id="mSr" value="'+(p.spref||'')+'"></div><div class="mfr"><label>Job number (MM ref)</label><input id="mSj" value="'+(p.job_ref||'')+'"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Business unit</label>'+buS('mSb',p.bu)+'</div><div class="mfr"><label>Supplier</label><input id="mSs" value="'+(p.supplier||'')+'"></div></div>'
+  +'<div class="mfr"><label>Description</label><textarea id="mSd">'+(p.description||'')+'</textarea></div>'
+  +'<div class="f2"><div class="mfr"><label>Excl. Amount (R)</label><input type="number" id="mSa" value="'+(p.amount||0)+'"></div><div class="mfr"><label>Date ordered</label><input type="date" id="mSdt" value="'+(p.ordered||td())+'"></div></div>'
+  +'<div class="mfoot"><button class="btn" id="cancelSPOE">Cancel</button><button class="btn btn-p" id="saveSPOE">Update PO</button></div>');
+  document.getElementById('cancelSPOE').addEventListener('click',closeM);
+  document.getElementById('saveSPOE').addEventListener('click',function(){
+    var b={spref:gv('mSr'),job_ref:gv('mSj'),bu:gv('mSb'),supplier:gv('mSs'),description:gv('mSd'),amount:+gv('mSa')||0,ordered:fmtD(gv('mSdt'))};
+    dbPatch('supplier_pos','id=eq.'+id,b).then(function(){closeM();return loadAll();}).then(function(){go('buyer');toast('PO updated','s');}).catch(function(e){toast(e.message,'e');});
+  });
+}
+
 document.addEventListener('click',function(e){
   var tid=e.target.id;
   if(tid==='addLeadBtn'){oLead(null);return;}
@@ -1492,7 +1506,11 @@ document.addEventListener('click',function(e){
   if(action==='editOrder')oOrder(id);
   if(action==='delOrder')cfm('Delete order','Permanently delete this order?',function(){dbDel('orders','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('orders');toast('Deleted','s');});});
   if(action==='togSPO'){var p=null;for(var i=0;i<spos.length;i++){if(spos[i].id===id){p=spos[i];break;}}if(p)dbPatch('supplier_pos','id=eq.'+id,{received:!p.received}).then(function(){return loadAll();}).then(function(){go('buyer');toast('Updated','s');});}
-  if(action==='editSPO')oSPO(id);
+  if(action==='editSPO'){
+    var sp=null;for(var i=0;i<spos.length;i++){if(spos[i].id===id){sp=spos[i];break;}}
+    if(sp)oSPOEditForm(id,sp);
+    return;
+  }
   if(action==='delSPO')cfm('Delete PO','Permanently delete?',function(){dbDel('supplier_pos','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('buyer');toast('Deleted','s');});});
   if(action==='editJC')oJCFull(id);
   if(action==='delJC')cfm('Delete job card','Permanently delete?',function(){dbDel('job_cards','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('jc');toast('Deleted','s');});});
