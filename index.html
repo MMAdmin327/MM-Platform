@@ -1478,6 +1478,177 @@ function oSPOEditForm(id,p){
   });
 }
 
+function printWI(w){
+  var labData=w.labour_data?JSON.parse(w.labour_data):[];
+  var stData=w.standing_data?JSON.parse(w.standing_data):[];
+
+  // Build labour rows
+  var labRows='';
+  var labTotal=0;
+  for(var i=0;i<12;i++){
+    var ld=labData[i]||null;
+    var emp=ld?ld.emp:'';
+    var mon=ld?(+ld.mon||0):0,tue=ld?(+ld.tue||0):0,wed=ld?(+ld.wed||0):0;
+    var thu=ld?(+ld.thu||0):0,fri=ld?(+ld.fri||0):0,sat=ld?(+ld.sat||0):0;
+    var tot=mon+tue+wed+thu+fri+sat;
+    var kg=ld?(+ld.kg||0):0;
+    var done=ld&&ld.done?'✓':'';
+    labTotal+=tot;
+    labRows+='<tr>'
+    +'<td style="text-align:center;color:#718096">'+(i+1)+'</td>'
+    +'<td>'+emp+'</td>'
+    +'<td style="text-align:center">'+(mon||'')+'</td>'
+    +'<td style="text-align:center">'+(tue||'')+'</td>'
+    +'<td style="text-align:center">'+(wed||'')+'</td>'
+    +'<td style="text-align:center">'+(thu||'')+'</td>'
+    +'<td style="text-align:center">'+(fri||'')+'</td>'
+    +'<td style="text-align:center">'+(sat||'')+'</td>'
+    +'<td style="text-align:center">'+(kg||'')+'</td>'
+    +'<td style="text-align:center;font-weight:700;color:#276749">'+done+'</td>'
+    +'</tr>';
+  }
+
+  // Build standing time rows
+  var stRows='';
+  var stTotal=0;
+  for(var k=0;k<5;k++){
+    var sd=stData[k]||null;
+    var semp=sd?sd.emp:'';
+    var sreason=sd?sd.reason:'';
+    var smon=sd?(+sd.mon||0):0,stue=sd?(+sd.tue||0):0,swed=sd?(+sd.wed||0):0;
+    var sthu=sd?(+sd.thu||0):0,sfri=sd?(+sd.fri||0):0,ssat=sd?(+sd.sat||0):0;
+    var stot=smon+stue+swed+sthu+sfri+ssat;
+    stTotal+=stot;
+    stRows+='<tr>'
+    +'<td>'+(k+1)+'</td>'
+    +'<td>'+sreason+'</td>'
+    +'<td>'+semp+'</td>'
+    +'<td style="text-align:center">'+(smon||'')+'</td>'
+    +'<td style="text-align:center">'+(stue||'')+'</td>'
+    +'<td style="text-align:center">'+(swed||'')+'</td>'
+    +'<td style="text-align:center">'+(sthu||'')+'</td>'
+    +'<td style="text-align:center">'+(sfri||'')+'</td>'
+    +'<td style="text-align:center">'+(ssat||'')+'</td>'
+    +'<td style="text-align:center;font-weight:700">'+(stot||'')+'</td>'
+    +'</tr>';
+  }
+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8">'
+  +'<title>WI '+w.wi_ref+'</title>'
+  +'<style>'
+  +'*{box-sizing:border-box;margin:0;padding:0}'
+  +'body{font-family:Arial,sans-serif;font-size:11px;color:#000;padding:20px}'
+  +'.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f1923;padding-bottom:12px;margin-bottom:14px}'
+  +'.logo-area{display:flex;flex-direction:column}'
+  +'.company{font-size:16px;font-weight:700;color:#0f1923}'
+  +'.sub{font-size:10px;color:#718096;margin-top:2px}'
+  +'.doc-title{font-size:22px;font-weight:700;color:#0f1923;text-align:right}'
+  +'.doc-ref{font-size:10px;color:#718096;text-align:right;margin-top:2px}'
+  +'.section-title{background:#0f1923;color:#fff;font-weight:700;font-size:11px;padding:5px 8px;margin:12px 0 6px;letter-spacing:.05em;text-transform:uppercase}'
+  +'.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #ccc}'
+  +'.grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;border:1px solid #ccc}'
+  +'.field{padding:5px 8px;border-right:1px solid #ccc;border-bottom:1px solid #ccc}'
+  +'.field:last-child{border-right:none}'
+  +'.field-label{font-size:9px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}'
+  +'.field-value{font-size:11px;font-weight:500;min-height:14px}'
+  +'table{width:100%;border-collapse:collapse;font-size:10px}'
+  +'th{background:#0f1923;color:#fff;padding:5px 6px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.04em}'
+  +'th.c{text-align:center}'
+  +'td{padding:5px 6px;border-bottom:1px solid #e2e8f0}'
+  +'td.c{text-align:center}'
+  +'tr:nth-child(even) td{background:#f9fafb}'
+  +'.totrow td{background:#f0f0f0;font-weight:700;border-top:2px solid #0f1923}'
+  +'.signoff{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}'
+  +'.sign-box{border:1px solid #ccc;padding:10px;border-radius:4px}'
+  +'.sign-line{border-bottom:1px solid #333;margin:20px 0 4px;height:1px}'
+  +'.footer{margin-top:16px;padding-top:8px;border-top:1px solid #ccc;display:flex;justify-content:space-between;font-size:9px;color:#718096}'
+  +'@media print{body{padding:10px}}'
+  +'</style></head><body>'
+
+  // Header
+  +'<div class="header">'
+  +'<div class="logo-area"><div class="company">Mine Minerals Supplies &amp; Services</div><div class="sub">Rustenburg · 066 212 2225 · info@mineminerals.co.za</div></div>'
+  +'<div><div class="doc-title">WORK INSTRUCTION</div><div class="doc-ref">Doc Ref: MM-WI-001 | Rev: 00</div></div>'
+  +'</div>'
+
+  // Section 1 — Job Details
+  +'<div class="section-title">1. Job Details</div>'
+  +'<div class="grid4">'
+  +'<div class="field"><div class="field-label">WI Number</div><div class="field-value">'+w.wi_ref+'</div></div>'
+  +'<div class="field"><div class="field-label">MM Job Number</div><div class="field-value">'+w.job_ref+'</div></div>'
+  +'<div class="field"><div class="field-label">Date Issued</div><div class="field-value">'+fd(w.start_date)+'</div></div>'
+  +'<div class="field"><div class="field-label">Target Completion</div><div class="field-value">'+fd(w.target_date)+'</div></div>'
+  +'</div>'
+  +'<div class="grid2">'
+  +'<div class="field"><div class="field-label">Job Description</div><div class="field-value">'+w.description+'</div></div>'
+  +'<div class="field"><div class="field-label">Business Unit</div><div class="field-value">'+w.bu+'</div></div>'
+  +'</div>'
+  +'<div class="grid4">'
+  +'<div class="field"><div class="field-label">Foreman / Issued By</div><div class="field-value">'+w.foreman+'</div></div>'
+  +'<div class="field"><div class="field-label">Trade / Skill</div><div class="field-value">'+w.trade+'</div></div>'
+  +'<div class="field"><div class="field-label">Estimated Hours</div><div class="field-value">'+w.est_hrs+'</div></div>'
+  +'<div class="field"><div class="field-label">Priority</div><div class="field-value">'+w.priority+'</div></div>'
+  +'</div>'
+
+  // Section 2 — Labour Hours
+  +'<div class="section-title">2. Labour Hours</div>'
+  +'<table><thead><tr>'
+  +'<th style="width:24px" class="c">#</th>'
+  +'<th>Employee</th>'
+  +'<th class="c">Mon</th><th class="c">Tue</th><th class="c">Wed</th><th class="c">Thu</th><th class="c">Fri</th><th class="c">Sat</th>'
+  +'<th class="c">KG</th><th class="c">Done ✓</th>'
+  +'</tr></thead><tbody>'+labRows
+  +'<tr class="totrow"><td></td><td>TOTAL LABOUR HOURS</td><td colspan="6"></td><td></td><td class="c">'+labTotal+'</td></tr>'
+  +'</tbody></table>'
+
+  // Section 3 — Standing Time
+  +'<div class="section-title">3. Standing Time</div>'
+  +'<table><thead><tr>'
+  +'<th style="width:24px" class="c">#</th>'
+  +'<th>Reason for Standing Time</th>'
+  +'<th>Employee</th>'
+  +'<th class="c">Mon</th><th class="c">Tue</th><th class="c">Wed</th><th class="c">Thu</th><th class="c">Fri</th><th class="c">Sat</th>'
+  +'<th class="c">Total</th>'
+  +'</tr></thead><tbody>'+stRows
+  +'<tr class="totrow"><td colspan="9" style="text-align:right">TOTAL STANDING TIME (hrs):</td><td class="c">'+stTotal+'</td></tr>'
+  +'</tbody></table>'
+
+  // Section 4 — Sign off
+  +'<div class="section-title">4. Sign-Off</div>'
+  +'<div style="border:1px solid #ccc;padding:8px;margin-bottom:8px;font-size:10px;background:#fffbeb">'
+  +'<strong>ARTISAN ACKNOWLEDGEMENT:</strong> I confirm that I have read, understood, and accept the work instructions detailed above and will carry out the work accordingly.'
+  +'</div>'
+  +'<div class="signoff">'
+  +'<div class="sign-box">'
+  +'<div class="field-label" style="margin-bottom:4px">Artisan Name</div>'
+  +'<div style="font-weight:600;margin-bottom:8px">'+w.artisan+'</div>'
+  +'<div class="sign-line"></div>'
+  +'<div class="field-label">Artisan Signature &nbsp;&nbsp;&nbsp; Date: _______________</div>'
+  +'</div>'
+  +'<div class="sign-box">'
+  +'<div class="field-label" style="margin-bottom:4px">HOD Name</div>'
+  +'<div style="font-weight:600;margin-bottom:8px">'+w.hod+'</div>'
+  +'<div class="sign-line"></div>'
+  +'<div class="field-label">HOD Signature &nbsp;&nbsp;&nbsp; Date: _______________</div>'
+  +'<div style="margin-top:8px"><span class="field-label">All Steps Complete: </span>'
+  +'<span style="margin-left:8px">☐ Yes &nbsp; ☐ No &nbsp; ☐ Partial</span></div>'
+  +'</div>'
+  +'</div>'
+
+  // Footer
+  +'<div class="footer">'
+  +'<span>Mine Minerals Supplies &amp; Services | Work Instruction Form | Doc Ref: MM-WI-001 | Rev: 00</span>'
+  +'<span>Printed: '+new Date().toLocaleDateString('en-ZA')+'</span>'
+  +'</div>'
+
+  +'<script>window.onload=function(){window.print();}<\/script>'
+  +'</body></html>';
+
+  var win=window.open('','_blank');
+  if(win){win.document.write(html);win.document.close();}
+  else{toast('Allow popups to print','e');}
+}
+
 document.addEventListener('click',function(e){
   var tid=e.target.id;
   if(tid==='addLeadBtn'){oLead(null);return;}
@@ -1518,6 +1689,7 @@ document.addEventListener('click',function(e){
   if(action==='editLR')oLR(id);
   if(action==='delLR')cfm('Delete employee','Remove this employee?',function(){dbDel('labour_rates','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('lrates');toast('Deleted','s');});});
   if(action==='editWI')oWI(id);
+  if(action==='printWI'){var pw=null;for(var i=0;i<wis.length;i++){if(wis[i].id===id){pw=wis[i];break;}}if(pw)printWI(pw);return;}
   if(action==='delWI')cfm('Delete WI','Permanently delete this work instruction?',function(){dbDel('work_instructions','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('wi');toast('Deleted','s');});});
   if(action==='editLR')oLR(id);
   if(action==='delLR')cfm('Delete employee','Remove this employee rate?',function(){dbDel('labour_rates','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('lrates');toast('Deleted','s');});});
