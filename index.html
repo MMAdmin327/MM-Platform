@@ -495,24 +495,58 @@ function wonToOrder(id){
 function toFinance(id){
   var o=null;for(var i=0;i<orders.length;i++){if(orders[i].id===id){o=orders[i];break;}}
   if(!o)return;
+  // Materials from Buyer Sheet
   var linked=spos.filter(function(p){return p.job_ref===o.ref;});
   var matCost=linked.reduce(function(s,p){return s+(+p.amount||0);},0);
-  var linkedJCs=jcs.filter(function(j){return j.job_ref===o.ref;});
-  var labHrs=linkedJCs.reduce(function(s,j){return s+(+j.actual_hrs||0);},0);
-  var buRate=BU_RATES[o.bu]||350;
-  var labCost=Math.round(labHrs*buRate);
+  // Labour from WI forms — per employee × their individual rate
+  var jobWIs=wis.filter(function(w){return w.job_ref===o.ref;});
+  var empTotals={};
+  jobWIs.forEach(function(w){
+    var labData=w.labour_data?JSON.parse(w.labour_data):[];
+    labData.forEach(function(e){
+      if(!e.emp)return;
+      var hrs=(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);
+      if(!empTotals[e.emp])empTotals[e.emp]=0;
+      empTotals[e.emp]+=hrs;
+    });
+  });
+  var labCost=0;
+  var labHrs=0;
+  Object.keys(empTotals).forEach(function(empName){
+    var rate=0;
+    for(var i=0;i<lrates.length;i++){if(lrates[i].emp_name===empName){rate=+lrates[i].rate||0;break;}}
+    var hrs=empTotals[empName];
+    labHrs+=hrs;
+    labCost+=hrs*rate;
+  });
+  labCost=Math.round(labCost);
+  // Standing time cost
+  var stCost=0;
+  jobWIs.forEach(function(w){
+    var stData=w.standing_data?JSON.parse(w.standing_data):[];
+    stData.forEach(function(e){
+      if(!e.emp)return;
+      var hrs=(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);
+      var rate=0;
+      for(var i=0;i<lrates.length;i++){if(lrates[i].emp_name===e.emp){rate=+lrates[i].rate||0;break;}}
+      stCost+=hrs*rate;
+    });
+  });
+  stCost=Math.round(stCost);
   var oh=Math.round((+o.order_val||0)*0.08);
   var nr='INV-'+new Date().getFullYear()+'-'+String(invs.length+1).padStart(3,'0');
+  var wiInfo=jobWIs.length>0?jobWIs.length+' WI'+(jobWIs.length!==1?'s':'')+' | '+labHrs+' hrs = '+R(labCost):'No WIs — labour R0';
   openM('<div class="mtitle">Move to Finance</div>'
-  +'<div class="info-box"><div class="info-box-title">Auto-calculated from job '+o.ref+'</div><div class="info-box-sub">'+linked.length+' supplier PO'+(linked.length!==1?'s':'')+' = '+R(matCost)+' &nbsp;|&nbsp; '+labHrs+' actual hrs &times; R350 = '+R(labCost)+'</div></div>'
+  +'<div class="info-box"><div class="info-box-title">Auto-calculated from job '+o.ref+'</div><div class="info-box-sub">📦 '+linked.length+' supplier PO'+(linked.length!==1?'s':'')+' = '+R(matCost)+' &nbsp;|&nbsp; 🔧 '+wiInfo+(stCost>0?' &nbsp;|&nbsp; ⚠ Standing time = '+R(stCost):'')+'</div></div>'
   +'<div class="f2"><div class="mfr"><label>Invoice ref</label><input id="iRef" value="'+nr+'"></div><div class="mfr"><label>Invoice date</label><input type="date" id="iDate" value="'+td()+'"></div></div>'
   +'<div class="f2"><div class="mfr"><label>Client</label><input id="iCl" value="'+o.client+'" readonly style="background:#f4f6f9"></div><div class="mfr"><label>Invoice value (R)</label><input type="number" id="iVal" value="'+(o.order_val||0)+'"></div></div>'
-  +'<div class="f2"><div class="mfr"><label>Material cost (R)</label><input type="number" id="iMat" value="'+matCost+'"></div><div class="mfr"><label>Labour cost (R)</label><input type="number" id="iLab" value="'+labCost+'"></div></div>'
-  +'<div class="f2"><div class="mfr"><label>Overheads (R)</label><input type="number" id="iOH" value="'+oh+'"></div><div class="mfr"><label>Status</label><select id="iSt"><option>Outstanding</option><option>Paid</option></select></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Material cost (R) — from Buyer Sheet</label><input type="number" id="iMat" value="'+matCost+'"></div><div class="mfr"><label>Labour cost (R) — from WI forms</label><input type="number" id="iLab" value="'+labCost+'"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Standing time cost (R)</label><input type="number" id="iST" value="'+stCost+'"></div><div class="mfr"><label>Overheads (R)</label><input type="number" id="iOH" value="'+oh+'"></div></div>'
+  +'<div class="mfr"><label>Status</label><select id="iSt"><option>Outstanding</option><option>Paid</option></select></div>'
   +'<div class="mfoot"><button class="btn" id="cancelInv">Cancel</button><button class="btn btn-p" id="confirmInv">Confirm — move to Finance</button></div>');
   document.getElementById('cancelInv').addEventListener('click',closeM);
   document.getElementById('confirmInv').addEventListener('click',function(){
-    var inv={inv_ref:gv('iRef'),job_ref:o.ref,client:gv('iCl'),bu:o.bu,order_val:+gv('iVal')||0,mat_cost:+gv('iMat')||0,labour_cost:+gv('iLab')||0,overheads:+gv('iOH')||0,invoiced_date:fmtD(gv('iDate')),status:gv('iSt')};
+    var inv={inv_ref:gv('iRef'),job_ref:o.ref,client:gv('iCl'),bu:o.bu,order_val:+gv('iVal')||0,mat_cost:+gv('iMat')||0,labour_cost:+gv('iLab')||0,overheads:(+gv('iST')||0)+(+gv('iOH')||0),invoiced_date:fmtD(gv('iDate')),status:gv('iSt')};
     dbPost('invoices',inv).then(function(){
       return dbPatch('orders','id=eq.'+id,{invoiced:true,status:'Completed'});
     }).then(function(){
