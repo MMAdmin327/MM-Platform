@@ -167,7 +167,6 @@ tr:hover td{background:#f8fafc}
     <button class="nbtn" data-tab="leads"><span class="npip"></span>New Business</button>
     <button class="nbtn" data-tab="orders"><span class="npip"></span>Order Book</button>
     <button class="nbtn" data-tab="buyer"><span class="npip"></span>Buyer Sheet</button>
-    <button class="nbtn" data-tab="jc"><span class="npip"></span>Job Cards</button>
     <button class="nbtn" data-tab="fin"><span class="npip"></span>Finance</button>
     <button class="nbtn" data-tab="wi"><span class="npip"></span>Work Instructions</button>
     <button class="nbtn" data-tab="jcosting"><span class="npip"></span>Job Costing</button>
@@ -214,8 +213,8 @@ function dbDel(t,q){
 
 function loadAll(){
   sync(true,'Loading...');
-  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('job_cards'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];}),dbGet('work_instructions').catch(function(){return[];})]).then(function(res){
-    leads=res[0];orders=res[1];spos=res[2];jcs=res[3];invs=res[4];lrates=res[5]||[];wis=res[6]||[];
+  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];}),dbGet('work_instructions').catch(function(){return[];})]).then(function(res){
+    leads=res[0];orders=res[1];spos=res[2];jcs=[];invs=res[3];lrates=res[4]||[];wis=res[5]||[];
     sync(false,'Live');
   }).catch(function(e){sync(false,'Error',true);toast('Load error: '+e.message,'e');});
 }
@@ -317,12 +316,11 @@ function xlx(data,cols,file,sheet){
 }
 
 function go(tab){
-  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,jc:rJC,fin:rFin,wi:rWI,jcosting:rJobCosting,lrates:rLRates};
+  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,fin:rFin,wi:rWI,jcosting:rJobCosting,lrates:rLRates};
   var body=document.getElementById('body');
   body.innerHTML=renders[tab]?renders[tab]():'';
   if(tab==='leads')setTimeout(fLeads,0);
   if(tab==='orders')setTimeout(fOrders,0);
-  if(tab==='jc')setTimeout(fJCs,0);
 }
 
 function rDash(){
@@ -1688,11 +1686,11 @@ document.addEventListener('click',function(e){
   if(tid==='addLeadBtn'){oLead(null);return;}
   if(tid==='addOrderBtn'){oOrder(null);return;}
   if(tid==='addSPOBtn'){oSPO(null);return;}
-  if(tid==='addJCBtn'){oJCFull(null);return;}
+
   if(tid==='expLeadsBtn'){expLeads();return;}
   if(tid==='expOrdersBtn'){expOrders();return;}
   if(tid==='expBuyerBtn'){expBuyer();return;}
-  if(tid==='expJCBtn'){expJC();return;}
+
   if(tid==='expFinBtn'){expFin();return;}
   if(tid==='refreshBtn'){loadAll().then(function(){go('dash');});return;}
   if(tid==='apiKeyBtn'){oAPIKey();return;}
@@ -1717,8 +1715,7 @@ document.addEventListener('click',function(e){
     return;
   }
   if(action==='delSPO')cfm('Delete PO','Permanently delete?',function(){dbDel('supplier_pos','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('buyer');toast('Deleted','s');});});
-  if(action==='editJC')oJCFull(id);
-  if(action==='delJC')cfm('Delete job card','Permanently delete?',function(){dbDel('job_cards','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('jc');toast('Deleted','s');});});
+
   if(action==='editInv')oInv(id);
   if(action==='editLR')oLR(id);
   if(action==='delLR')cfm('Delete employee','Remove this employee?',function(){dbDel('labour_rates','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('lrates');toast('Deleted','s');});});
@@ -1731,11 +1728,11 @@ document.addEventListener('click',function(e){
   if(action==='addLead')oLead(null);
   if(action==='addOrder')oOrder(null);
   if(action==='addSPO')oSPO();
-  if(action==='addJC')oJCFull();
+
   if(action==='expLeads')expLeads();
   if(action==='expOrders')expOrders();
   if(action==='expBuyer')expBuyer();
-  if(action==='expJC')expJC();
+
   if(action==='expFin')expFin();
   if(action==='refresh')loadAll().then(function(){go('dash');});
 });
@@ -1744,7 +1741,7 @@ document.addEventListener('change',function(e){
   var el=e.target;
   if(el.id==='ls'||el.id==='lbu'||el.id==='lst')fLeads();
   if(el.id==='os'||el.id==='obu'||el.id==='ost')fOrders();
-  if(el.id==='jbu'||el.id==='jst')fJCs();
+
   if(el.id==='bbu'||el.id==='bst'){var tb=document.getElementById('btb');if(tb)tb.innerHTML=rSPOrows();}
   if(el.id==='wibu'||el.id==='wist'){var wtb=document.getElementById('witb');if(wtb)wtb.innerHTML=rWIRows();}
 });
