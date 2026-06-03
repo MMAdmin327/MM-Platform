@@ -167,10 +167,10 @@ tr:hover td{background:#f8fafc}
     <button class="nbtn" data-tab="leads"><span class="npip"></span>New Business</button>
     <button class="nbtn" data-tab="orders"><span class="npip"></span>Order Book</button>
     <button class="nbtn" data-tab="buyer"><span class="npip"></span>Buyer Sheet</button>
-    <button class="nbtn" data-tab="fin"><span class="npip"></span>Finance</button>
+    <button class="nbtn" data-tab="fin" id="finTab"><span class="npip"></span>Finance</button>
     <button class="nbtn" data-tab="wi"><span class="npip"></span>Work Instructions</button>
-    <button class="nbtn" data-tab="jcosting"><span class="npip"></span>Job Costing</button>
-    <button class="nbtn" data-tab="lrates"><span class="npip"></span>Labour Rates</button>
+    <button class="nbtn" data-tab="jcosting" id="jcostTab"><span class="npip"></span>Job Costing</button>
+    <button class="nbtn" data-tab="lrates" id="lratesTab"><span class="npip"></span>Labour Rates</button>
   </div>
   <div class="body" id="body"><div class="empty">Loading...</div></div>
 </div>
@@ -187,7 +187,11 @@ var USERS=[
   {u:'sales',p:'MM@Sales2026',name:'Internal Sales',role:'Sales'},
   {u:'ops',p:'MM@Ops2026',name:'Operations Manager',role:'Operations'},
   {u:'finance',p:'MM@Fin2026',name:'Finance',role:'Finance'},
-  {u:'buyer',p:'MM@Buy2026',name:'Buyer',role:'Buyer'}
+  {u:'buyer',p:'MM@Buy2026',name:'Buyer',role:'Buyer'},
+  {u:'fabhod',p:'MM@Fab2026',name:'FAB HOD',role:'HOD',bu:'Fabrication'},
+  {u:'pumpshod',p:'MM@Pumps2026',name:'Pumps HOD',role:'HOD',bu:'Pumps'},
+  {u:'consthod',p:'MM@Const2026',name:'Const HOD',role:'HOD',bu:'Construction'},
+  {u:'wearhod',p:'MM@Wear2026',name:'Wear HOD',role:'HOD',bu:'Wear Protection'}
 ];
 var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],cUser=null;
 
@@ -244,7 +248,15 @@ function launch(){
   document.getElementById('app').style.display='block';
   document.getElementById('hdate').textContent=new Date().toLocaleDateString('en-ZA',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
   document.getElementById('uname').textContent=cUser.name;
-  document.getElementById('urole').textContent=cUser.role;
+  document.getElementById('urole').textContent=cUser.role+(cUser.bu?' — '+cUser.bu:'');
+  // Hide restricted tabs for HODs
+  var isHOD=cUser.role==='HOD';
+  var finTab=document.getElementById('finTab');
+  var jcostTab=document.getElementById('jcostTab');
+  var lratesTab=document.getElementById('lratesTab');
+  if(finTab)finTab.style.display=isHOD?'none':'';
+  if(jcostTab)jcostTab.style.display=isHOD?'none':'';
+  if(lratesTab)lratesTab.style.display=isHOD?'none':'';
   loadAll().then(function(){go('dash');});
 }
 
@@ -386,6 +398,7 @@ function fOrders(){
   var bu=gv('obu'),st=gv('ost');
   var f=orders.filter(function(o){
     if(o.invoiced)return false;
+    if(cUser&&cUser.role==='HOD'&&o.bu!==cUser.bu)return false;
     if(s&&(o.client+o.ref+o.bu).toLowerCase().indexOf(s)<0)return false;
     if(bu&&o.bu!==bu)return false;
     if(st&&o.status!==st)return false;
@@ -1138,7 +1151,7 @@ function oLR(id){
 
 // ── WORK INSTRUCTIONS ────────────────────────────────────────────────────────
 function rWI(){
-  var myWIs=wis;
+  var myWIs=cUser&&cUser.role==='HOD'?wis.filter(function(w){return w.bu===cUser.bu;}):wis;
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Total WIs</div><div class="kpi-v">'+myWIs.length+'</div></div><div class="kpi ca"><div class="kpi-l">In progress</div><div class="kpi-v">'+myWIs.filter(function(w){return w.status==="In progress";}).length+'</div></div><div class="kpi cg"><div class="kpi-l">Completed</div><div class="kpi-v">'+myWIs.filter(function(w){return w.status==="Completed";}).length+'</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Work instruction register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addWIBtn">+ New WI</button></div></div>'
   +'<div class="toolbar"><input type="text" id="wis" placeholder="Search WI number, MM number, description..."><select id="wibu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="wist"><option value="">All statuses</option><option>Open</option><option>In progress</option><option>Completed</option></select></div>'
