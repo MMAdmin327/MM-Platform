@@ -75,7 +75,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .btn-sm{font-size:11px;padding:3px 9px}
 .btn-g{background:none;border:none;padding:3px 6px;color:var(--muted);cursor:pointer;border-radius:4px;font-size:14px}.btn-g:hover{background:var(--bg);color:var(--text)}
 .btn-d{background:none;border:none;padding:3px 6px;color:#fc8181;cursor:pointer;border-radius:4px;font-size:14px}.btn-d:hover{background:var(--red-bg);color:var(--red)}
-.tw{overflow-x:auto}
+.tw{overflow-x:auto;transform:rotateX(180deg)}.tw table{transform:rotateX(180deg)}
 .sticky-col{position:sticky;right:0;background:#fff;box-shadow:-2px 0 4px rgba(0,0,0,.06)}
 tr:hover .sticky-col{background:#f8fafc}
 table{width:100%;border-collapse:collapse;font-size:12px;table-layout:auto}
@@ -189,7 +189,7 @@ var USERS=[
   {u:'finance',p:'MM@Fin2026',name:'Finance',role:'Finance'},
   {u:'buyer',p:'MM@Buy2026',name:'Buyer',role:'Buyer'},
   {u:'fabhod',p:'MM@Fab2026',name:'FAB HOD',role:'HOD',bu:'Fabrication'},
-  {u:'pumpshod',p:'MM@Pumps2026',name:'Pumps HOD',role:'HOD',bu:'Pumps'},
+  {u:'pumpshod',p:'MM@Pumps2026',name:'Pumps HOD',role:'HOD',bu:'Pumps',bu2:'Motors'},
   {u:'consthod',p:'MM@Const2026',name:'Const HOD',role:'HOD',bu:'Construction'},
   {u:'wearhod',p:'MM@Wear2026',name:'Wear HOD',role:'HOD',bu:'Wear Protection'}
 ];
@@ -398,7 +398,7 @@ function fOrders(){
   var bu=gv('obu'),st=gv('ost');
   var f=orders.filter(function(o){
     if(o.invoiced)return false;
-    if(cUser&&cUser.role==='HOD'&&o.bu!==cUser.bu)return false;
+    if(cUser&&cUser.role==='HOD'&&o.bu!==cUser.bu&&(!cUser.bu2||o.bu!==cUser.bu2))return false;
     if(s&&(o.client+o.ref+o.bu).toLowerCase().indexOf(s)<0)return false;
     if(bu&&o.bu!==bu)return false;
     if(st&&o.status!==st)return false;
@@ -1151,7 +1151,7 @@ function oLR(id){
 
 // ── WORK INSTRUCTIONS ────────────────────────────────────────────────────────
 function rWI(){
-  var myWIs=cUser&&cUser.role==='HOD'?wis.filter(function(w){return w.bu===cUser.bu;}):wis;
+  var myWIs=cUser&&cUser.role==='HOD'?wis.filter(function(w){return w.bu===cUser.bu||(cUser.bu2&&w.bu===cUser.bu2);}):wis;
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Total WIs</div><div class="kpi-v">'+myWIs.length+'</div></div><div class="kpi ca"><div class="kpi-l">In progress</div><div class="kpi-v">'+myWIs.filter(function(w){return w.status==="In progress";}).length+'</div></div><div class="kpi cg"><div class="kpi-l">Completed</div><div class="kpi-v">'+myWIs.filter(function(w){return w.status==="Completed";}).length+'</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Work instruction register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addWIBtn">+ New WI</button></div></div>'
   +'<div class="toolbar"><input type="text" id="wis" placeholder="Search WI number, MM number, description..."><select id="wibu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="wist"><option value="">All statuses</option><option>Open</option><option>In progress</option><option>Completed</option></select></div>'
