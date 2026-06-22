@@ -461,9 +461,21 @@ function rOrders(){
   var openV=open.reduce(function(s,o){return s+(+o.order_val||0);},0);
   var late=open.filter(function(o){return o.due<td();}).length;
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Open orders</div><div class="kpi-v">'+open.length+'</div></div><div class="kpi cgo"><div class="kpi-l">Order book value</div><div class="kpi-v">'+R(openV)+'</div></div><div class="kpi '+(late>0?'cr':'cg')+'"><div class="kpi-l">Overdue</div><div class="kpi-v">'+late+'</div><div class="kpi-s">Past due date</div></div><div class="kpi cg"><div class="kpi-l">Completed</div><div class="kpi-v">'+orders.filter(function(o){return o.status==='Completed';}).length+'</div></div></div>'
-  +'<div class="card"><div class="card-hd"><h3>Order book register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addOrderBtn">+ Add order</button><button class="btn btn-e" id="expOrdersBtn">&#8595; Excel</button></div></div>'
+  +'<div class="card"><div class="card-hd"><h3>Order book register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addOrderBtn">+ Add order</button><button class="btn btn-sm" id="addSubJobBtn" style="background:#f0fff4;color:#276749;border-color:#c6f6d5">+ Add sub-job</button><button class="btn btn-e" id="expOrdersBtn">&#8595; Excel</button></div></div>'
   +'<div class="toolbar"><input type="text" id="os" placeholder="Search..."><select id="obu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="ost"><option value="">All statuses</option><option>Open</option><option>In progress</option><option>Completed</option></select></div>'
   +'<div class="tw"><table><thead><tr><th>Job #</th><th>Client</th><th>Client PO #</th><th>BU</th><th>Value</th><th>Due</th><th>SLA</th><th style="text-align:center">Mat %</th><th style="text-align:center">Lab %</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead><tbody id="otb"><tr><td colspan="12" class="empty">Loading...</td></tr></tbody></table></div></div>';
+}
+
+function orderRow(o,isSubJob){
+  var slaTd=sla(o.due,o.status);
+  var finBtn=o.status==='Completed'&&!isSubJob?'<button class="btn btn-won btn-sm" data-id="'+o.id+'" data-action="toFinance">&rarr; Finance</button> ':'';
+  var cp=getJobCostPct(o.ref,+o.order_val||1);
+  var noBudget=(!o.mat_budget||+o.mat_budget===0)&&(!o.lab_budget||+o.lab_budget===0);
+  var noBadge='<span style="background:#f4f6f9;color:#a0aec0;border:1px solid #e2e8f0;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600">No budget</span>';
+  function pBadge(p){if(noBudget)return noBadge;if(p<0)return '<span style="color:#a0aec0;font-size:11px">—</span>';return p>=100?'<span style="color:#c53030;font-weight:700;font-size:11px">'+p+'%</span>':p>=85?'<span style="color:#d97706;font-weight:700;font-size:11px">'+p+'%</span>':'<span style="color:#276749;font-size:11px">'+p+'%</span>';}
+  var subStyle=isSubJob?'background:#f8fafc;':'';
+  var refDisplay=isSubJob?'<span style="color:#a0aec0;margin-right:3px">&#8627;</span><button class="btn-g" style="font-family:monospace;font-size:11px;font-weight:600;color:#4a6741;padding:2px 4px" data-id="'+o.id+'" data-action="showJobCost">'+o.ref+'</button>':'<button class="btn-g" style="font-family:monospace;font-size:11px;font-weight:600;color:var(--navy);padding:2px 4px" data-id="'+o.id+'" data-action="showJobCost">'+o.ref+'</button>';
+  return '<tr style="'+subStyle+'"><td class="mono">'+refDisplay+'</td><td>'+(isSubJob?'<span style="color:#718096;font-size:11px">'+o.client+'</span>':o.client)+'</td><td class="mono" style="font-size:11px">'+(o.client_po||'—')+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+pBadge(cp.matPct)+'</td><td style="text-align:center">'+pBadge(cp.labPct)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(o.notes||'—')+'</td><td style="white-space:nowrap">'+finBtn+'<button class="btn-g" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
 }
 
 function fOrders(){
@@ -472,22 +484,29 @@ function fOrders(){
   var f=orders.filter(function(o){
     if(o.invoiced)return false;
     if(cUser&&cUser.role==='HOD'&&o.bu!==cUser.bu&&(!cUser.bu2||o.bu!==cUser.bu2))return false;
-    if(s&&(o.client+o.ref+o.bu).toLowerCase().indexOf(s)<0)return false;
+    if(s&&(o.client+o.ref+o.bu+(o.master_ref||'')).toLowerCase().indexOf(s)<0)return false;
     if(bu&&o.bu!==bu)return false;
     if(st&&o.status!==st)return false;
     return true;
   });
   var tb=document.getElementById('otb');if(!tb)return;
   if(!f.length){tb.innerHTML='<tr><td colspan="12" class="empty">No records match</td></tr>';return;}
-  tb.innerHTML=f.map(function(o){
-    var slaTd=sla(o.due,o.status);
-    var finBtn=o.status==='Completed'?'<button class="btn btn-won btn-sm" data-id="'+o.id+'" data-action="toFinance">&rarr; Finance</button> ':'';
-    var cp=getJobCostPct(o.ref,+o.order_val||1);
-    var noBudget=(!o.mat_budget||+o.mat_budget===0)&&(!o.lab_budget||+o.lab_budget===0);
-    var noBadge='<span style="background:#f4f6f9;color:#a0aec0;border:1px solid #e2e8f0;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600">No budget</span>';
-    function pBadge(p){if(noBudget)return noBadge;if(p<0)return '<span style="color:#a0aec0;font-size:11px">—</span>';return p>=100?'<span style="color:#c53030;font-weight:700;font-size:11px">'+p+'%</span>':p>=85?'<span style="color:#d97706;font-weight:700;font-size:11px">'+p+'%</span>':'<span style="color:#276749;font-size:11px">'+p+'%</span>';}
-    return '<tr><td class="mono"><button class="btn-g" style="font-family:monospace;font-size:11px;font-weight:600;color:var(--navy);padding:2px 4px" data-id="'+o.id+'" data-action="showJobCost">'+o.ref+'</button></td><td>'+o.client+'</td><td class="mono" style="font-size:11px">'+(o.client_po||'—')+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+pBadge(cp.matPct)+'</td><td style="text-align:center">'+pBadge(cp.labPct)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(o.notes||'—')+'</td><td style="white-space:nowrap">'+finBtn+'<button class="btn-g" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
-  }).join('');
+  // Separate masters and sub-jobs
+  var masters=f.filter(function(o){return !o.master_ref;});
+  var subJobs=f.filter(function(o){return !!o.master_ref;});
+  var rows='';
+  masters.forEach(function(o){
+    rows+=orderRow(o,false);
+    // Append sub-jobs under this master
+    var subs=subJobs.filter(function(s){return s.master_ref===o.ref;});
+    subs.forEach(function(sub){rows+=orderRow(sub,true);});
+  });
+  // Any sub-jobs whose master is not in current filter — show them too
+  subJobs.forEach(function(sub){
+    var masterInList=masters.some(function(m){return m.ref===sub.master_ref;});
+    if(!masterInList)rows+=orderRow(sub,true);
+  });
+  tb.innerHTML=rows||'<tr><td colspan="12" class="empty">No records match</td></tr>';
 }
 
 function rBuyer(){
@@ -1789,10 +1808,79 @@ function calcWOTotal(){
   if(unEl){unEl.textContent='R '+Math.round(unalloc).toLocaleString('en-ZA');unEl.style.color=unalloc<0?'#c53030':unalloc===0?'#276749':'#718096';}
 }
 
+function oSubJob(masterId){
+  // Get master order
+  var master=null;
+  if(masterId){for(var i=0;i<orders.length;i++){if(orders[i].id===masterId){master=orders[i];break;}}}
+  // Build master options
+  var masterOrds=orders.filter(function(o){return !o.invoiced&&!o.master_ref;});
+  var masterOpts=masterOrds.map(function(o){return '<option value="'+o.ref+'"'+(master&&master.ref===o.ref?' selected':'')+'>'+o.ref+' — '+o.client+'</option>';}).join('');
+
+  openM('<div class="mtitle">Add Sub-job</div>'
+  +'<div style="background:#f0fff4;border:1px solid #c6f6d5;border-radius:6px;padding:9px 12px;font-size:11px;color:#276749;margin-bottom:14px">A sub-job splits a master MM Number across multiple BUs. Each sub-job gets its own budget, WIs and Buyer Sheet entries.</div>'
+  +'<div class="mfr"><label>Master MM Number</label><select id="sjMaster" onchange="onSubJobMasterChange()"><option value="">Select master order...</option>'+masterOpts+'</select></div>'
+  +'<div class="f2"><div class="mfr"><label>Sub-job ref (auto)</label><input id="sjRef" value="" readonly style="background:#f4f6f9;font-weight:600;color:#276749"></div><div class="mfr"><label>Business unit</label>'+buS('sjBU','')+'</div></div>'
+  +'<div class="mfr"><label>Scope description</label><input id="sjDesc" placeholder="e.g. Fabrication scope — skid base"></div>'
+  +'<div style="background:#f4f6f9;border-radius:8px;padding:12px;margin-bottom:11px"><div style="font-size:10px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Budget Split for this BU</div>'
+  +'<div class="f2"><div class="mfr"><label>Sub-job value (R)</label><input type="number" id="sjVal" value="0"></div><div class="mfr"><label>Due date</label><input type="date" id="sjDue"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Material budget (R)</label><input type="number" id="sjMB" value="0"></div><div class="mfr"><label>Labour budget (R)</label><input type="number" id="sjLB" value="0"></div></div>'
+  +'</div>'
+  +'<div class="mfoot"><button class="btn" id="cancelSJ">Cancel</button><button class="btn btn-p" id="saveSJ">Create sub-job</button></div>');
+
+  document.getElementById('cancelSJ').addEventListener('click',closeM);
+  if(masterId)setTimeout(function(){onSubJobMasterChange();},50);
+
+  document.getElementById('saveSJ').addEventListener('click',function(){
+    var masterRef=gv('sjMaster');
+    if(!masterRef){toast('Please select a master order','e');return;}
+    var masterOrd=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===masterRef){masterOrd=orders[i];break;}}
+    var sjRef=gv('sjRef');
+    if(!sjRef){toast('Sub-job ref not generated — select master first','e');return;}
+    var data={
+      ref:sjRef,
+      master_ref:masterRef,
+      client:masterOrd?masterOrd.client:'',
+      client_po:masterOrd?masterOrd.client_po:'',
+      bu:gv('sjBU'),
+      type:gv('sjDesc'),
+      order_val:+gv('sjVal')||0,
+      mat_budget:+gv('sjMB')||0,
+      lab_budget:+gv('sjLB')||0,
+      received:td(),
+      due:fmtD(gv('sjDue')),
+      status:'Open',
+      job_cards:0,
+      invoiced:false,
+      notes:'Sub-job of '+masterRef+' — '+gv('sjDesc')
+    };
+    dbPost('orders',data).then(function(){
+      closeM();return loadAll();
+    }).then(function(){
+      go('orders');toast('Sub-job '+sjRef+' created','s');
+    }).catch(function(e){toast(e.message,'e');});
+  });
+}
+
+function onSubJobMasterChange(){
+  var masterRef=gv('sjMaster');
+  if(!masterRef)return;
+  // Count existing sub-jobs for this master
+  var existing=orders.filter(function(o){return o.master_ref===masterRef;});
+  var nextNum=existing.length+1;
+  var buEl=document.getElementById('sjBU');
+  var bu=buEl?buEl.value:'';
+  // Auto ref: MM1350/FAB or MM1350/01 if no BU selected
+  var buCode=bu?bu.substring(0,3).toUpperCase():String(nextNum).padStart(2,'0');
+  var autoRef=masterRef+'/'+buCode;
+  var refEl=document.getElementById('sjRef');
+  if(refEl)refEl.value=autoRef;
+}
+
 document.addEventListener('click',function(e){
   var tid=e.target.id;
   if(tid==='addLeadBtn'){oLead(null);return;}
   if(tid==='addOrderBtn'){oOrder(null);return;}
+  if(tid==='addSubJobBtn'){oSubJob(null);return;}
   if(tid==='addSPOBtn'){oSPO(null);return;}
 
   if(tid==='expLeadsBtn'){expLeads();return;}
