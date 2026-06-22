@@ -337,6 +337,8 @@ function go(tab){
 
 function getJobCostPct(ref,quoteVal){
   var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===ref){ord=orders[i];break;}}
+  // If order value is 0 or missing, percentages are meaningless
+  if(!quoteVal||quoteVal<=0)return {matPct:-1,labPct:-1,matSpent:0,labCost:0,matBudget:0,labBudget:0};
   var matBudget=ord&&+ord.mat_budget>0?+ord.mat_budget:0;
   var labBudget=ord&&+ord.lab_budget>0?+ord.lab_budget:0;
   // Materials from buyer sheet
@@ -372,6 +374,7 @@ function rDash(){
   var mg=invT>0?Math.round(prof/invT*100):0;
 
   // High risk jobs — mat% or lab% >= 85
+  var noBudgetCount=openOrds.filter(function(o){return (!o.mat_budget||+o.mat_budget===0)&&(!o.lab_budget||+o.lab_budget===0)&&+o.order_val>0;}).length;
   var highRisk=openOrds.filter(function(o){
     var cp=getJobCostPct(o.ref,+o.order_val||1);
     return (cp.matPct>=85&&cp.matPct>=0)||(cp.labPct>=85&&cp.labPct>=0);
@@ -401,6 +404,8 @@ function rDash(){
   +'<div class="kpi '+(convPct>=50?'cg':convPct>=25?'ca':'cr')+'"><div class="kpi-l">Quote conversion</div><div class="kpi-v">'+convPct+'%</div><div class="kpi-s">'+won+' won of '+totalLeads+' quotes</div></div>'
   +'<div class="kpi cb"><div class="kpi-l">Open order book</div><div class="kpi-v">'+R(openV)+'</div><div class="kpi-s">'+openOrds.length+' active jobs</div></div>'
   +'<div class="kpi '+(lateO>0?'cr':'cg')+'"><div class="kpi-l">Overdue orders</div><div class="kpi-v">'+lateO+'</div><div class="kpi-s">Past due date</div></div>'
+  
+  +'<div class="kpi '+(noBudgetCount>0?'ca':'cg')+'"><div class="kpi-l">No budget set</div><div class="kpi-v">'+noBudgetCount+'</div><div class="kpi-s">Jobs need budget</div></div>'
   +'<div class="kpi '+(highRisk.length>0?'cr':'cg')+'"><div class="kpi-l">High risk jobs</div><div class="kpi-v">'+highRisk.length+'</div><div class="kpi-s">85%+ budget used</div></div>'
   +'<div class="kpi '+(overspent.length>0?'cr':'cg')+'"><div class="kpi-l">Overspent jobs</div><div class="kpi-v">'+overspent.length+'</div><div class="kpi-s">100%+ budget used</div></div>'
   +'<div class="kpi '+(mg>15?'cg':mg>0?'ca':'cr')+'"><div class="kpi-l">Gross margin</div><div class="kpi-v">'+mg+'%</div><div class="kpi-s">Invoiced work</div></div>'
@@ -416,7 +421,9 @@ function rDash(){
   +'<div class="card"><div class="card-hd"><h3>Live order feed — active jobs</h3></div><div class="tw"><table><thead><tr><th>Job #</th><th>Client</th><th>BU</th><th>Value</th><th>Due</th><th>SLA</th><th style="text-align:center">Mat %</th><th style="text-align:center">Lab %</th><th>Status</th></tr></thead><tbody>'
   +openOrds.map(function(o){
     var cp=getJobCostPct(o.ref,+o.order_val||1);
-    function pctBadge(p){if(p<0)return '<span style="color:#a0aec0;font-size:11px">—</span>';return p>=100?'<span style="color:#c53030;font-weight:700;font-size:11px">'+p+'%</span>':p>=85?'<span style="color:#d97706;font-weight:700;font-size:11px">'+p+'%</span>':'<span style="color:#276749;font-size:11px">'+p+'%</span>';}
+    var noBdg=(!o.mat_budget||+o.mat_budget===0)&&(!o.lab_budget||+o.lab_budget===0);
+    var noBdgBadge='<span style="background:#f4f6f9;color:#a0aec0;border:1px solid #e2e8f0;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600">No budget</span>';
+    function pctBadge(p){if(noBdg)return noBdgBadge;if(p<0)return '<span style="color:#a0aec0;font-size:11px">—</span>';return p>=100?'<span style="color:#c53030;font-weight:700;font-size:11px">'+p+'%</span>':p>=85?'<span style="color:#d97706;font-weight:700;font-size:11px">'+p+'%</span>':'<span style="color:#276749;font-size:11px">'+p+'%</span>';}
     return '<tr><td class="mono">'+o.ref+'</td><td>'+o.client+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+sla(o.due,o.status)+'</td><td style="text-align:center">'+pctBadge(cp.matPct)+'</td><td style="text-align:center">'+pctBadge(cp.labPct)+'</td><td>'+obadge(o.status)+'</td></tr>';
   }).join('')
   +'</tbody></table></div></div>';
@@ -476,7 +483,9 @@ function fOrders(){
     var slaTd=sla(o.due,o.status);
     var finBtn=o.status==='Completed'?'<button class="btn btn-won btn-sm" data-id="'+o.id+'" data-action="toFinance">&rarr; Finance</button> ':'';
     var cp=getJobCostPct(o.ref,+o.order_val||1);
-    function pBadge(p){if(p<0)return '<span style="color:#a0aec0;font-size:11px">—</span>';return p>=100?'<span style="color:#c53030;font-weight:700;font-size:11px">'+p+'%</span>':p>=85?'<span style="color:#d97706;font-weight:700;font-size:11px">'+p+'%</span>':'<span style="color:#276749;font-size:11px">'+p+'%</span>';}
+    var noBudget=(!o.mat_budget||+o.mat_budget===0)&&(!o.lab_budget||+o.lab_budget===0);
+    var noBadge='<span style="background:#f4f6f9;color:#a0aec0;border:1px solid #e2e8f0;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600">No budget</span>';
+    function pBadge(p){if(noBudget)return noBadge;if(p<0)return '<span style="color:#a0aec0;font-size:11px">—</span>';return p>=100?'<span style="color:#c53030;font-weight:700;font-size:11px">'+p+'%</span>':p>=85?'<span style="color:#d97706;font-weight:700;font-size:11px">'+p+'%</span>':'<span style="color:#276749;font-size:11px">'+p+'%</span>';}
     return '<tr><td class="mono"><button class="btn-g" style="font-family:monospace;font-size:11px;font-weight:600;color:var(--navy);padding:2px 4px" data-id="'+o.id+'" data-action="showJobCost">'+o.ref+'</button></td><td>'+o.client+'</td><td class="mono" style="font-size:11px">'+(o.client_po||'—')+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+pBadge(cp.matPct)+'</td><td style="text-align:center">'+pBadge(cp.labPct)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(o.notes||'—')+'</td><td style="white-space:nowrap">'+finBtn+'<button class="btn-g" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
   }).join('');
 }
