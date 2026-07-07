@@ -1141,7 +1141,7 @@ function oJCFull(editId){
 // ── JOB PLAN (Draughting → Inspection stage tracker) ─────────────────────────
 // Used both from the legacy Job Card page and the new top-level Planner tab.
 function oJCPlan(id){
-  var j=null;for(var i=0;i<jcs.length;i++){if(jcs[i].id===id){j=jcs[i];break;}}
+  var j=null;for(var i=0;i<jcs.length;i++){if(String(jcs[i].id)===String(id)){j=jcs[i];break;}}
   if(!j){toast('Job card not found','e');return;}
   renderPlanModal(j,planStages(j),{table:'job_cards',header:'Job Plan — '+j.jcref+' &nbsp;<span style="color:var(--muted);font-weight:400">('+j.job_ref+')</span>',doneTab:'jc'});
 }
@@ -1167,7 +1167,7 @@ function oPlanNew(){
 }
 
 function oPlanEdit(id){
-  var p=null;for(var i=0;i<plans.length;i++){if(plans[i].id===id){p=plans[i];break;}}
+  var p=null;for(var i=0;i<plans.length;i++){if(String(plans[i].id)===String(id)){p=plans[i];break;}}
   if(!p){toast('Plan not found','e');return;}
   var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===p.job_ref){ord=orders[i];break;}}
   var header='Job Plan — '+p.job_ref+(ord?' &nbsp;<span style="color:var(--muted);font-weight:400">('+ord.client+')</span>':'');
