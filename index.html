@@ -191,6 +191,13 @@ var RHDRS={'apikey':KEY,'Authorization':'Bearer '+KEY};
 var WHDRS={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'};
 var BUS=['Fabrication','Construction','Pumps','TMM','Motors','Wear Protection','Mining Supplies','Laser Cutting'];
 var HODS=['Spies','Tony','Bennet','Gaily','Bennie','Tawanda','Lize'];
+function getExtraOwners(){try{return JSON.parse(localStorage.getItem('mm_extra_owners')||'[]');}catch(e){return [];}}
+function saveExtraOwner(name){var ex=getExtraOwners();if(ex.indexOf(name)<0){ex.push(name);localStorage.setItem('mm_extra_owners',JSON.stringify(ex));}}
+function ownerOptionsHTML(selected){
+  var all=HODS.concat(getExtraOwners().filter(function(n){return HODS.indexOf(n)<0;}));
+  if(selected&&all.indexOf(selected)<0)all.push(selected);
+  return all.map(function(h){return '<option'+(selected===h?' selected':'')+'>'+h+'</option>';}).join('')+'<option value="__add__">+ Add person...</option>';
+}
 var STAGE_TEMPLATE=[{name:'Draughting',hod:'Bennet'},{name:'Procurement',hod:'Spies'},{name:'Saw',hod:'Bennet'},{name:'Laser',hod:'Lize'},{name:'Fit up',hod:'Bennet'},{name:'Welding',hod:'Bennet'},{name:'Fettle',hod:'Bennet'},{name:'Sandblast',hod:'Gaily'},{name:'Corrosion Protection',hod:'Gaily'},{name:'Inspection',hod:'Tawanda'}];
 var PLAN_STATUS=['Not Started','In Progress','Delayed','On Hold','Complete'];
 function planBadge(s){return s==='Complete'?'b-done':s==='In Progress'?'b-prog':s==='Delayed'?'b-lost':s==='On Hold'?'b-inv':'b-open';}
@@ -1180,7 +1187,7 @@ function renderPlanModal(rec,stages,cfg){
     var overdue=s.status!=='Complete'&&s.end&&s.end<t;
     return '<tr>'
       +'<td><input class="pl-name" data-i="'+i+'" value="'+(s.name||'')+'" style="width:130px;font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
-      +'<td><select class="pl-hod" data-i="'+i+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px">'+HODS.map(function(h){return '<option'+(s.hod===h?' selected':'')+'>'+h+'</option>';}).join('')+'</select></td>'
+      +'<td><select class="pl-hod" data-i="'+i+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px">'+ownerOptionsHTML(s.hod)+'</select></td>'
       +'<td><input type="date" class="pl-start" data-i="'+i+'" value="'+(s.start||'')+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
       +'<td><input type="date" class="pl-end" data-i="'+i+'" value="'+(s.end||'')+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px'+(overdue?';color:#c53030;font-weight:700;border-color:#fc8181':'')+'"></td>'
       +'<td><select class="pl-status" data-i="'+i+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px">'+PLAN_STATUS.map(function(st){return '<option'+(s.status===st?' selected':'')+'>'+st+'</option>';}).join('')+'</select></td>'
@@ -1210,6 +1217,22 @@ function renderPlanModal(rec,stages,cfg){
     if(b){syncPlanFromInputs(stages);stages.splice(+b.getAttribute('data-i'),1);renderPlanModal(rec,stages,cfg);}
   });
   document.getElementById('planRows').addEventListener('change',function(e){
+    if(e.target.classList.contains('pl-hod')&&e.target.value==='__add__'){
+      var name=prompt('Add person — enter name:');
+      if(name){
+        name=name.trim();
+        if(name){
+          saveExtraOwner(name);
+          syncPlanFromInputs(stages);
+          var i=+e.target.getAttribute('data-i');
+          stages[i].hod=name;
+          renderPlanModal(rec,stages,cfg);
+          return;
+        }
+      }
+      e.target.value=stages[+e.target.getAttribute('data-i')].hod;
+      return;
+    }
     syncPlanFromInputs(stages);
     var g=document.getElementById('planGantt');
     if(g)renderMiniGantt(stages);
