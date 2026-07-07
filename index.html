@@ -1293,7 +1293,7 @@ function rPlanner(){
     return '<tr><td class="mono">'+p.job_ref+'</td><td>'+(ord?ord.client:'—')+'</td><td>'+(ord?'<span class="badge b-bu">'+ord.bu+'</span>':'—')+'</td><td class="mono">'+(ord&&ord.due?fd(ord.due):'—')+'</td>'
     +'<td><div style="display:flex;align-items:center;gap:6px"><div style="width:70px;height:6px;background:#f0f1f3;border-radius:3px;overflow:hidden"><div style="width:'+r.pct+'%;height:6px;background:'+(r.overdue?'#e53e3e':'#3182ce')+'"></div></div><span style="font-size:11px;color:var(--muted)">'+r.pct+'%</span></div></td>'
     +'<td style="font-size:11px">'+(r.current?r.current.name+' <span style="color:var(--muted)">('+r.current.hod+')</span>':'<span class="badge b-done">Complete</span>')+(r.overdue?' <span class="badge b-lost">'+r.overdue+' overdue</span>':'')+'</td>'
-    +'<td style="white-space:nowrap"><button class="btn-g" data-id="'+p.id+'" data-action="editPlan">&#128197;</button> <button class="btn-d" data-id="'+p.id+'" data-action="delPlan">&#10005;</button></td></tr>';
+    +'<td style="white-space:nowrap"><button class="btn-g" data-id="'+p.id+'" data-action="editPlan" style="font-size:11px;font-weight:600;color:var(--navy)">&#128197; Edit plan</button> <button class="btn-d" data-id="'+p.id+'" data-action="delPlan">&#10005;</button></td></tr>';
   }).join('')
   +(rows.length===0?'<tr><td colspan="7" class="empty">No job plans yet — click "+ New plan" as soon as an order comes in.</td></tr>':'')
   +'</tbody></table></div></div>';
