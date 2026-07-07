@@ -190,7 +190,7 @@ var KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im
 var RHDRS={'apikey':KEY,'Authorization':'Bearer '+KEY};
 var WHDRS={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'};
 var BUS=['Fabrication','Construction','Pumps','TMM','Motors','Wear Protection','Mining Supplies','Laser Cutting'];
-var HODS=['Spies','Tony','Bennet','Gaily','Bennie','Tawanda','Lize'];
+var HODS=['Spies','Tony','Bennet','Gaily','Bennie','Tawanda','Lize','John'];
 function getExtraOwners(){try{return JSON.parse(localStorage.getItem('mm_extra_owners')||'[]');}catch(e){return [];}}
 function saveExtraOwner(name){var ex=getExtraOwners();if(ex.indexOf(name)<0){ex.push(name);localStorage.setItem('mm_extra_owners',JSON.stringify(ex));}}
 function ownerOptionsHTML(selected){
@@ -198,7 +198,7 @@ function ownerOptionsHTML(selected){
   if(selected&&all.indexOf(selected)<0)all.push(selected);
   return all.map(function(h){return '<option'+(selected===h?' selected':'')+'>'+h+'</option>';}).join('')+'<option value="__add__">+ Add person...</option>';
 }
-var STAGE_TEMPLATE=[{name:'Draughting',hod:'Bennet'},{name:'Procurement',hod:'Spies'},{name:'Saw',hod:'Bennet'},{name:'Laser',hod:'Lize'},{name:'Fit up',hod:'Bennet'},{name:'Welding',hod:'Bennet'},{name:'Fettle',hod:'Bennet'},{name:'Sandblast',hod:'Gaily'},{name:'Corrosion Protection',hod:'Gaily'},{name:'Inspection',hod:'Tawanda'}];
+var STAGE_TEMPLATE=[{name:'Draughting',hod:'John'},{name:'Procurement',hod:'Spies'},{name:'Saw',hod:'Bennet'},{name:'Laser',hod:'Lize'},{name:'Fit up',hod:'Bennet'},{name:'Welding',hod:'Bennet'},{name:'Fettle',hod:'Bennet'},{name:'Sandblast',hod:'Gaily'},{name:'Corrosion Protection',hod:'Gaily'},{name:'Inspection',hod:'Tawanda'}];
 var PLAN_STATUS=['Not Started','In Progress','Delayed','On Hold','Complete'];
 function planBadge(s){return s==='Complete'?'b-done':s==='In Progress'?'b-prog':s==='Delayed'?'b-lost':s==='On Hold'?'b-inv':'b-open';}
 function planStages(j){return j.plan_data?JSON.parse(j.plan_data):STAGE_TEMPLATE.map(function(s){return {name:s.name,hod:s.hod,start:'',end:'',status:'Not Started',notes:''};});}
