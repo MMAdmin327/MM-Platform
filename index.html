@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Mine Minerals — Operations Platform</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f1923">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MM Platform">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -169,6 +177,7 @@ tr:hover td{background:#f8fafc}
     <button class="nbtn" data-tab="buyer"><span class="npip"></span>Buyer Sheet</button>
     <button class="nbtn" data-tab="fin" id="finTab"><span class="npip"></span>Finance</button>
     <button class="nbtn" data-tab="wi"><span class="npip"></span>Work Instructions</button>
+    <button class="nbtn" data-tab="planner" id="plannerTab"><span class="npip"></span>Planner</button>
     <button class="nbtn" data-tab="jcosting" id="jcostTab"><span class="npip"></span>Job Costing</button>
     <button class="nbtn" data-tab="lrates" id="lratesTab"><span class="npip"></span>Labour Rates</button>
   </div>
@@ -181,6 +190,12 @@ var KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im
 var RHDRS={'apikey':KEY,'Authorization':'Bearer '+KEY};
 var WHDRS={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'};
 var BUS=['Fabrication','Construction','Pumps','TMM','Motors','Wear Protection','Mining Supplies','Laser Cutting'];
+var HODS=['Spies','Tony','Bennet','Gaily','Bennie','Tawanda','Lize'];
+var STAGE_TEMPLATE=[{name:'Draughting',hod:'Bennet'},{name:'Procurement',hod:'Spies'},{name:'Saw',hod:'Bennet'},{name:'Laser',hod:'Lize'},{name:'Fit up',hod:'Bennet'},{name:'Welding',hod:'Bennet'},{name:'Fettle',hod:'Bennet'},{name:'Sandblast',hod:'Gaily'},{name:'Corrosion Protection',hod:'Gaily'},{name:'Inspection',hod:'Tawanda'}];
+var PLAN_STATUS=['Not Started','In Progress','Delayed','On Hold','Complete'];
+function planBadge(s){return s==='Complete'?'b-done':s==='In Progress'?'b-prog':s==='Delayed'?'b-lost':s==='On Hold'?'b-inv':'b-open';}
+function planStages(j){return j.plan_data?JSON.parse(j.plan_data):STAGE_TEMPLATE.map(function(s){return {name:s.name,hod:s.hod,start:'',end:'',status:'Not Started',notes:''};});}
+function planOverdueCount(j){var st=planStages(j),t=td();return st.filter(function(s){return s.status!=='Complete'&&s.end&&s.end<t;}).length;}
 var USERS=[
   {u:'martin',p:'MM@Admin2026',name:'Martin Spies',role:'CEO'},
   {u:'estimator',p:'MM@Est2026',name:'Estimator',role:'Estimator'},
@@ -194,7 +209,7 @@ var USERS=[
   {u:'wearhod',p:'MM@Wear2026',name:'Wear HOD',role:'HOD',bu:'Wear Protection'},
   {u:'planner',p:'MM@Plan2026',name:'Planner',role:'Planner'}
 ];
-var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],cUser=null;
+var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],plans=[],cUser=null;
 
 function dbGet(t,q){
   var url=SB+'/rest/v1/'+t+'?order=created_at.desc'+(q?'&'+q:'');
@@ -218,8 +233,8 @@ function dbDel(t,q){
 
 function loadAll(){
   sync(true,'Loading...');
-  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];}),dbGet('work_instructions').catch(function(){return[];})]).then(function(res){
-    leads=res[0];orders=res[1];spos=res[2];jcs=[];invs=res[3];lrates=res[4]||[];wis=res[5]||[];
+  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];}),dbGet('work_instructions').catch(function(){return[];}),dbGet('job_plans').catch(function(){return[];})]).then(function(res){
+    leads=res[0];orders=res[1];spos=res[2];jcs=[];invs=res[3];lrates=res[4]||[];wis=res[5]||[];plans=res[6]||[];
     sync(false,'Live');
   }).catch(function(e){sync(false,'Error',true);toast('Load error: '+e.message,'e');});
 }
@@ -329,7 +344,7 @@ function xlx(data,cols,file,sheet){
 }
 
 function go(tab){
-  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,fin:rFin,wi:rWI,jcosting:rJobCosting,lrates:rLRates};
+  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,fin:rFin,wi:rWI,jcosting:rJobCosting,lrates:rLRates,planner:rPlanner};
   var body=document.getElementById('body');
   body.innerHTML=renders[tab]?renders[tab]():'';
   if(tab==='leads')setTimeout(fLeads,0);
@@ -560,7 +575,8 @@ function fJCs(){
   tb.innerHTML=f.map(function(j){
     var bH=+j.budget_hrs||0,aH=+j.actual_hrs||0,bM=+j.mat_budget||0,aM=+j.mat_actual||0;
     var hV=aH-bH,mV=aM-bM;
-    return '<tr><td class="mono">'+j.jcref+'</td><td class="mono">'+j.job_ref+'</td><td><span class="badge b-bu">'+j.bu+'</span></td><td style="white-space:normal;font-size:11px;line-height:1.4">'+j.description+'</td><td>'+j.assigned+'</td><td class="mono">'+bH+'</td><td class="mono '+(aH>bH?'ob':'')+'">'+aH+'</td><td class="'+(hV>0?'pn':hV<0?'pp':'mono')+'">'+(hV===0?'—':(hV>0?'+':'')+hV)+'</td><td class="mono">'+R(bM)+'</td><td class="mono '+(aM>bM?'ob':'')+'">'+R(aM)+'</td><td class="'+(mV>0?'pn':mV<0?'pp':'mono')+'">'+(mV===0?'—':(mV>0?'+':'')+R(Math.abs(mV)))+'</td><td>'+obadge(j.status)+(aH>bH||aM>bM?' <span style="color:#c53030;font-size:11px">&#9888;</span>':'')+'</td><td class="sticky-col" style="white-space:nowrap"><button class="btn-g" data-id="'+j.id+'" data-action="editJC">&#9998;</button> <button class="btn-d" data-id="'+j.id+'" data-action="delJC">&#10005;</button></td></tr>';
+    var pOver=planOverdueCount(j);
+    return '<tr><td class="mono">'+j.jcref+'</td><td class="mono">'+j.job_ref+'</td><td><span class="badge b-bu">'+j.bu+'</span></td><td style="white-space:normal;font-size:11px;line-height:1.4">'+j.description+'</td><td>'+j.assigned+'</td><td class="mono">'+bH+'</td><td class="mono '+(aH>bH?'ob':'')+'">'+aH+'</td><td class="'+(hV>0?'pn':hV<0?'pp':'mono')+'">'+(hV===0?'—':(hV>0?'+':'')+hV)+'</td><td class="mono">'+R(bM)+'</td><td class="mono '+(aM>bM?'ob':'')+'">'+R(aM)+'</td><td class="'+(mV>0?'pn':mV<0?'pp':'mono')+'">'+(mV===0?'—':(mV>0?'+':'')+R(Math.abs(mV)))+'</td><td>'+obadge(j.status)+(aH>bH||aM>bM?' <span style="color:#c53030;font-size:11px">&#9888;</span>':'')+'</td><td class="sticky-col" style="white-space:nowrap"><button class="btn-g" data-id="'+j.id+'" data-action="planJC" title="Job plan">&#128197;'+(pOver?' <span style="color:#c53030;font-weight:700">'+pOver+'</span>':'')+'</button> <button class="btn-g" data-id="'+j.id+'" data-action="editJC">&#9998;</button> <button class="btn-d" data-id="'+j.id+'" data-action="delJC">&#10005;</button></td></tr>';
   }).join('');
 }
 
@@ -1120,6 +1136,167 @@ function oJCFull(editId){
       pr.then(function(){closeM();return loadAll();}).then(function(){go('jc');toast(editId?'Job card updated':'Job card saved','s');}).catch(function(e){toast(e.message,'e');});
     });
   },100);
+}
+
+// ── JOB PLAN (Draughting → Inspection stage tracker) ─────────────────────────
+// Used both from the legacy Job Card page and the new top-level Planner tab.
+function oJCPlan(id){
+  var j=null;for(var i=0;i<jcs.length;i++){if(jcs[i].id===id){j=jcs[i];break;}}
+  if(!j){toast('Job card not found','e');return;}
+  renderPlanModal(j,planStages(j),{table:'job_cards',header:'Job Plan — '+j.jcref+' &nbsp;<span style="color:var(--muted);font-weight:400">('+j.job_ref+')</span>',doneTab:'jc'});
+}
+
+function oPlanNew(){
+  var used={};plans.forEach(function(p){used[p.job_ref]=true;});
+  var avail=orders.filter(function(o){return !o.invoiced&&o.status!=='Completed'&&!used[o.ref];});
+  if(!avail.length){toast('No open orders without a plan yet','e');return;}
+  var opts=avail.map(function(o){return '<option value="'+o.ref+'">'+o.ref+' — '+o.client+'</option>';}).join('');
+  openM('<div class="mtitle">New Job Plan</div>'
+  +'<div class="mfr"><label>Order number (MM ref)</label><select id="mPj">'+opts+'</select></div>'
+  +'<p style="font-size:11px;color:var(--muted);margin-bottom:8px">The 10 standard stages (Draughting → Inspection) will be added automatically — edit dates and owners once it opens.</p>'
+  +'<div class="mfoot"><button class="btn" id="cancelPlanNew">Cancel</button><button class="btn btn-p" id="createPlanNew">Create plan</button></div>');
+  document.getElementById('cancelPlanNew').addEventListener('click',closeM);
+  document.getElementById('createPlanNew').addEventListener('click',function(){
+    var jobRef=gv('mPj');
+    var stages=STAGE_TEMPLATE.map(function(s){return {name:s.name,hod:s.hod,start:'',end:'',status:'Not Started',notes:''};});
+    dbPost('job_plans',{job_ref:jobRef,plan_data:JSON.stringify(stages)})
+      .then(function(){return loadAll();})
+      .then(function(){closeM();go('planner');toast('Plan created — set your dates','s');})
+      .catch(function(e){toast(e.message,'e');});
+  });
+}
+
+function oPlanEdit(id){
+  var p=null;for(var i=0;i<plans.length;i++){if(plans[i].id===id){p=plans[i];break;}}
+  if(!p){toast('Plan not found','e');return;}
+  var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===p.job_ref){ord=orders[i];break;}}
+  var header='Job Plan — '+p.job_ref+(ord?' &nbsp;<span style="color:var(--muted);font-weight:400">('+ord.client+')</span>':'');
+  renderPlanModal(p,planStages(p),{table:'job_plans',header:header,doneTab:'planner'});
+}
+
+function renderPlanModal(rec,stages,cfg){
+  var t=td();
+  var rows=stages.map(function(s,i){
+    var overdue=s.status!=='Complete'&&s.end&&s.end<t;
+    return '<tr>'
+      +'<td><input class="pl-name" data-i="'+i+'" value="'+(s.name||'')+'" style="width:130px;font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
+      +'<td><select class="pl-hod" data-i="'+i+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px">'+HODS.map(function(h){return '<option'+(s.hod===h?' selected':'')+'>'+h+'</option>';}).join('')+'</select></td>'
+      +'<td><input type="date" class="pl-start" data-i="'+i+'" value="'+(s.start||'')+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
+      +'<td><input type="date" class="pl-end" data-i="'+i+'" value="'+(s.end||'')+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px'+(overdue?';color:#c53030;font-weight:700;border-color:#fc8181':'')+'"></td>'
+      +'<td><select class="pl-status" data-i="'+i+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px">'+PLAN_STATUS.map(function(st){return '<option'+(s.status===st?' selected':'')+'>'+st+'</option>';}).join('')+'</select></td>'
+      +'<td>'+(overdue?'<span class="badge b-lost">Overdue</span>':'')+'</td>'
+      +'<td><button class="btn-d" data-i="'+i+'" data-plact="rm" title="Remove stage">&#10005;</button></td>'
+      +'</tr>';
+  }).join('');
+
+  var overdueCount=stages.filter(function(s){return s.status!=='Complete'&&s.end&&s.end<t;}).length;
+
+  openM('<div class="mtitle">'+cfg.header+(overdueCount?' <span class="badge b-lost" style="margin-left:8px">'+overdueCount+' overdue</span>':'')+'</div>'
+  +'<div class="tw" style="margin-bottom:8px"><table><thead><tr><th>Stage</th><th>Owner</th><th>Start</th><th>End</th><th>Status</th><th></th><th></th></tr></thead><tbody id="planRows">'+rows+'</tbody></table></div>'
+  +'<button class="btn btn-g" id="addPlanRow" style="margin-bottom:16px;font-size:11px">+ Add stage</button>'
+  +'<div id="planGantt" style="margin-bottom:6px"></div>'
+  +'<div class="mfoot"><button class="btn" id="cancelPlan">Close</button><button class="btn btn-p" id="savePlan">Save plan</button></div>');
+
+  renderMiniGantt(stages);
+
+  document.getElementById('cancelPlan').addEventListener('click',closeM);
+  document.getElementById('addPlanRow').addEventListener('click',function(){
+    syncPlanFromInputs(stages);
+    stages.push({name:'New stage',hod:HODS[0],start:'',end:'',status:'Not Started',notes:''});
+    renderPlanModal(rec,stages,cfg);
+  });
+  document.getElementById('planRows').addEventListener('click',function(e){
+    var b=e.target.closest('[data-plact="rm"]');
+    if(b){syncPlanFromInputs(stages);stages.splice(+b.getAttribute('data-i'),1);renderPlanModal(rec,stages,cfg);}
+  });
+  document.getElementById('planRows').addEventListener('change',function(e){
+    syncPlanFromInputs(stages);
+    var g=document.getElementById('planGantt');
+    if(g)renderMiniGantt(stages);
+  });
+  document.getElementById('savePlan').addEventListener('click',function(){
+    syncPlanFromInputs(stages);
+    dbPatch(cfg.table,'id=eq.'+rec.id,{plan_data:JSON.stringify(stages)})
+      .then(function(){return loadAll();})
+      .then(function(){closeM();go(cfg.doneTab);toast('Plan saved','s');})
+      .catch(function(e){toast(e.message,'e');});
+  });
+}
+
+function syncPlanFromInputs(stages){
+  var rows=document.querySelectorAll('#planRows tr');
+  rows.forEach(function(tr,i){
+    if(!stages[i])return;
+    stages[i].name=tr.querySelector('.pl-name').value;
+    stages[i].hod=tr.querySelector('.pl-hod').value;
+    stages[i].start=tr.querySelector('.pl-start').value;
+    stages[i].end=tr.querySelector('.pl-end').value;
+    stages[i].status=tr.querySelector('.pl-status').value;
+  });
+}
+
+function renderMiniGantt(stages){
+  var g=document.getElementById('planGantt');
+  if(!g)return;
+  var dates=[];
+  stages.forEach(function(s){if(s.start)dates.push(s.start);if(s.end)dates.push(s.end);});
+  if(!dates.length){g.innerHTML='<p style="font-size:11px;color:var(--muted)">Add start/end dates above to see the Gantt chart.</p>';return;}
+  dates.sort();
+  var min=new Date(dates[0]+'T00:00:00'),max=new Date(dates[dates.length-1]+'T00:00:00');
+  min.setDate(min.getDate()-1);max.setDate(max.getDate()+1);
+  var totalDays=Math.max(1,Math.round((max-min)/86400000));
+  var t=td();
+  function pct(d){var dt=new Date(d+'T00:00:00');return Math.min(100,Math.max(0,((dt-min)/86400000/totalDays)*100));}
+  var todayPct=pct(t);
+  var colors={'Not Started':'#a0aec0','In Progress':'#3182ce','Delayed':'#e53e3e','On Hold':'#dd6b20','Complete':'#38a169'};
+  var barsHtml=stages.map(function(s){
+    var has=s.start&&s.end;
+    var left=has?pct(s.start):0,width=has?Math.max(1,pct(s.end)-pct(s.start)):0;
+    return '<div style="display:flex;align-items:center;gap:8px;padding:3px 0">'
+      +'<div style="width:120px;flex-shrink:0;font-size:10px;color:var(--text)">'+s.name+'</div>'
+      +'<div style="position:relative;flex:1;height:16px;background:#f4f6f9;border-radius:3px">'
+      +(has?'<div style="position:absolute;top:0;left:'+left+'%;width:'+width+'%;height:16px;background:'+(colors[s.status]||'#a0aec0')+';border-radius:3px;min-width:3px"></div>':'')
+      +'</div></div>';
+  }).join('');
+  g.innerHTML='<div style="position:relative;padding-top:4px">'
+    +'<div style="position:relative;height:1px;background:#e2e8f0;margin:0 0 4px 128px">'
+    +'<div style="position:absolute;top:-4px;left:'+todayPct+'%;width:1px;height:10px;border-left:1px dashed #e53e3e"></div>'
+    +'</div>'+barsHtml
+    +'<div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--muted)">'
+    +Object.keys(colors).map(function(k){return '<span><span style="display:inline-block;width:8px;height:8px;background:'+colors[k]+';border-radius:2px;margin-right:3px"></span>'+k+'</span>';}).join('')
+    +'</div></div>';
+}
+
+function rPlanner(){
+  var t=td();
+  var rows=plans.map(function(p){
+    var st=planStages(p);
+    var total=st.length||1;
+    var done=st.filter(function(s){return s.status==='Complete';}).length;
+    var pct=Math.round(done/total*100);
+    var overdue=st.filter(function(s){return s.status!=='Complete'&&s.end&&s.end<t;}).length;
+    var current=st.filter(function(s){return s.status!=='Complete';})[0];
+    var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===p.job_ref){ord=orders[i];break;}}
+    return {p:p,st:st,pct:pct,overdue:overdue,current:current,ord:ord};
+  });
+  rows.sort(function(a,b){
+    if((a.overdue>0)!==(b.overdue>0))return a.overdue>0?-1:1;
+    return (a.ord&&a.ord.due||'9999').localeCompare(b.ord&&b.ord.due||'9999');
+  });
+  var atRisk=rows.filter(function(r){return r.overdue>0;}).length;
+
+  return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Active plans</div><div class="kpi-v">'+plans.length+'</div></div><div class="kpi '+(atRisk>0?'cr':'cg')+'"><div class="kpi-l">Jobs at risk</div><div class="kpi-v">'+atRisk+'</div><div class="kpi-s">Overdue stage(s)</div></div></div>'
+  +'<div class="card"><div class="card-hd"><h3>Job planner — order to Inspection</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addPlanBtn">+ New plan</button></div></div>'
+  +'<div class="tw"><table><thead><tr><th>Job #</th><th>Client</th><th>BU</th><th>Required by</th><th>Progress</th><th>Current stage</th><th>Actions</th></tr></thead><tbody>'
+  +rows.map(function(r){
+    var p=r.p,ord=r.ord;
+    return '<tr><td class="mono">'+p.job_ref+'</td><td>'+(ord?ord.client:'—')+'</td><td>'+(ord?'<span class="badge b-bu">'+ord.bu+'</span>':'—')+'</td><td class="mono">'+(ord&&ord.due?fd(ord.due):'—')+'</td>'
+    +'<td><div style="display:flex;align-items:center;gap:6px"><div style="width:70px;height:6px;background:#f0f1f3;border-radius:3px;overflow:hidden"><div style="width:'+r.pct+'%;height:6px;background:'+(r.overdue?'#e53e3e':'#3182ce')+'"></div></div><span style="font-size:11px;color:var(--muted)">'+r.pct+'%</span></div></td>'
+    +'<td style="font-size:11px">'+(r.current?r.current.name+' <span style="color:var(--muted)">('+r.current.hod+')</span>':'<span class="badge b-done">Complete</span>')+(r.overdue?' <span class="badge b-lost">'+r.overdue+' overdue</span>':'')+'</td>'
+    +'<td style="white-space:nowrap"><button class="btn-g" data-id="'+p.id+'" data-action="editPlan">&#128197;</button> <button class="btn-d" data-id="'+p.id+'" data-action="delPlan">&#10005;</button></td></tr>';
+  }).join('')
+  +(rows.length===0?'<tr><td colspan="7" class="empty">No job plans yet — click "+ New plan" as soon as an order comes in.</td></tr>':'')
+  +'</tbody></table></div></div>';
 }
 
 function oAPIKey(){
@@ -1894,6 +2071,9 @@ document.addEventListener('click',function(e){
   if(tid==='addLRBtn'){oLR(null);return;}
   if(tid==='addWIBtn'){oWI(null);return;}
   if(tid==='addLRBtn'){oLR(null);return;}
+  if(tid==='addJCBtn'){oJCFull(null);return;}
+  if(tid==='expJCBtn'){expJC();return;}
+  if(tid==='addPlanBtn'){oPlanNew();return;}
   var el=e.target.closest('[data-action]');
   if(!el)return;
   var action=el.getAttribute('data-action');
@@ -1913,6 +2093,11 @@ document.addEventListener('click',function(e){
   }
   if(action==='delSPO')cfm('Delete PO','Permanently delete?',function(){dbDel('supplier_pos','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('buyer');toast('Deleted','s');});});
 
+  if(action==='editJC')oJCFull(id);
+  if(action==='delJC')cfm('Delete job card','Permanently delete this job card and its plan?',function(){dbDel('job_cards','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('jc');toast('Deleted','s');});});
+  if(action==='planJC')oJCPlan(id);
+  if(action==='editPlan')oPlanEdit(id);
+  if(action==='delPlan')cfm('Delete plan','Permanently delete this job plan?',function(){dbDel('job_plans','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('planner');toast('Deleted','s');});});
   if(action==='editInv')oInv(id);
   if(action==='editLR')oLR(id);
   if(action==='delLR')cfm('Delete employee','Remove this employee?',function(){dbDel('labour_rates','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('lrates');toast('Deleted','s');});});
@@ -1958,6 +2143,12 @@ window.onload=function(){
   var s=null;try{s=sessionStorage.getItem('mm');}catch(e){}
   if(s){try{cUser=JSON.parse(s);launch();}catch(e){}}
 };
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('/MM-Platform/sw.js').catch(function(e){console.warn('SW registration failed',e);});
+  });
+}
 </script>
 </body>
 </html>
