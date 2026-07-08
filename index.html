@@ -1341,27 +1341,40 @@ function renderMiniGantt(stages){
   if(!dates.length){g.innerHTML='<p style="font-size:11px;color:var(--muted)">Add start/end dates in the grid to see the Gantt chart.</p>';return;}
   dates.sort();
   var min=new Date(dates[0]+'T00:00:00'),max=new Date(dates[dates.length-1]+'T00:00:00');
-  min.setDate(min.getDate()-1);max.setDate(max.getDate()+1);
+  min.setDate(min.getDate()-2);max.setDate(max.getDate()+2);
   var totalDays=Math.max(1,Math.round((max-min)/86400000));
   var t=td();
   function pct(d){var dt=new Date(d+'T00:00:00');return Math.min(100,Math.max(0,((dt-min)/86400000/totalDays)*100));}
   var todayPct=pct(t);
   var colors={'Not Started':'#a0aec0','In Progress':'#3182ce','Delayed':'#e53e3e','On Hold':'#dd6b20','Complete':'#38a169'};
+
+  var weekMarkers=[];
+  var cursor=new Date(min);
+  cursor.setDate(cursor.getDate()-cursor.getDay());
+  while(cursor<=max){weekMarkers.push(new Date(cursor));cursor.setDate(cursor.getDate()+7);}
+  var weekHtml=weekMarkers.map(function(w){
+    var iso=w.toISOString().slice(0,10);
+    var lbl=w.toLocaleDateString('en-ZA',{day:'2-digit',month:'short'});
+    return '<div style="position:absolute;left:'+pct(iso)+'%;top:0;transform:translateX(-50%);font-size:9px;color:var(--muted)">'+lbl+'</div>';
+  }).join('');
+
   var barsHtml=stages.map(function(s){
     var has=s.start&&s.end;
     var left=has?pct(s.start):0,width=has?Math.max(1,pct(s.end)-pct(s.start)):0;
     return '<div style="display:flex;align-items:center;gap:8px;padding:3px 0">'
       +'<div style="width:120px;flex-shrink:0;font-size:10px;color:var(--text)">'+s.name+'</div>'
       +'<div style="position:relative;flex:1;height:16px;background:#f4f6f9;border-radius:3px">'
-      +(has?'<div style="position:absolute;top:0;left:'+left+'%;width:'+width+'%;height:16px;background:'+(colors[s.status]||'#a0aec0')+';border-radius:3px;min-width:3px"></div>':'')
+      +(has?'<div style="position:absolute;top:0;left:'+left+'%;width:'+width+'%;height:16px;background:'+(colors[s.status]||'#a0aec0')+';border-radius:3px;min-width:3px" title="'+s.name+': '+fd(s.start)+' \u2013 '+fd(s.end)+'"></div>':'')
       +'</div></div>';
   }).join('');
-  g.innerHTML='<div style="position:relative;padding-top:4px">'
+  g.innerHTML='<div style="position:relative;padding-top:16px">'
+    +'<div style="position:relative;height:14px;margin:0 0 4px 128px">'+weekHtml+'</div>'
     +'<div style="position:relative;height:1px;background:#e2e8f0;margin:0 0 4px 128px">'
     +'<div style="position:absolute;top:-4px;left:'+todayPct+'%;width:1px;height:10px;border-left:1px dashed #e53e3e"></div>'
     +'</div>'+barsHtml
-    +'<div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--muted)">'
+    +'<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:10px;color:var(--muted)">'
     +Object.keys(colors).map(function(k){return '<span><span style="display:inline-block;width:8px;height:8px;background:'+colors[k]+';border-radius:2px;margin-right:3px"></span>'+k+'</span>';}).join('')
+    +'<span><span style="display:inline-block;width:8px;border-top:1px dashed #e53e3e;margin-right:3px"></span>Today</span>'
     +'</div></div>';
 }
 
