@@ -82,6 +82,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .btn-won:hover{background:#1e5238}
 .btn-sm{font-size:11px;padding:3px 9px}
 .btn-g{background:none;border:none;padding:3px 6px;color:var(--muted);cursor:pointer;border-radius:4px;font-size:14px}.btn-g:hover{background:var(--bg);color:var(--text)}
+.ptab{background:none;border:1px solid var(--border);padding:5px 12px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;border-radius:6px}
+.ptab.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.pl-move{background:none;border:none;color:#a0aec0;cursor:pointer;font-size:9px;padding:1px 2px;display:block;line-height:1.3}
+.pl-move:hover{color:var(--navy)}
 .btn-d{background:none;border:none;padding:3px 6px;color:#fc8181;cursor:pointer;border-radius:4px;font-size:14px}.btn-d:hover{background:var(--red-bg);color:var(--red)}
 .tw{overflow-x:auto;overflow-y:auto;max-height:520px}
 .sticky-col{position:sticky;right:0;background:#fff;box-shadow:-2px 0 4px rgba(0,0,0,.06)}
@@ -115,6 +119,7 @@ tr:hover td{background:#f8fafc}
 .ob{color:#c53030;font-weight:600}
 .mov{position:fixed;inset:0;background:rgba(10,18,26,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
 .mbox{background:#fff;border-radius:12px;padding:22px;width:100%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:92vh;overflow-y:auto}
+.mbox-wide{max-width:1180px}
 .mtitle{font-size:14px;font-weight:600;color:var(--navy);margin-bottom:15px;padding-bottom:12px;border-bottom:1px solid var(--border)}
 .f2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .mfr{margin-bottom:11px}
@@ -326,11 +331,11 @@ function sync(on,lbl,err){
   d.className='sdot'+(on?' syncing':err?' err':'');
   l.textContent=lbl;
 }
-function openM(html){
+function openM(html,wide){
   closeM();
   var el=document.createElement('div');
   el.className='mov';el.id='mov';
-  el.innerHTML='<div class="mbox">'+html+'</div>';
+  el.innerHTML='<div class="mbox'+(wide?' mbox-wide':'')+'">'+html+'</div>';
   el.addEventListener('click',function(e){if(e.target===el)closeM();});
   document.body.appendChild(el);
 }
@@ -1150,7 +1155,9 @@ function oJCFull(editId){
 function oJCPlan(id){
   var j=null;for(var i=0;i<jcs.length;i++){if(String(jcs[i].id)===String(id)){j=jcs[i];break;}}
   if(!j){toast('Job card not found','e');return;}
-  renderPlanModal(j,planStages(j),{table:'job_cards',header:'Job Plan — '+j.jcref+' &nbsp;<span style="color:var(--muted);font-weight:400">('+j.job_ref+')</span>',doneTab:'jc'});
+  var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===j.job_ref){ord=orders[i];break;}}
+  var meta={jobNumber:j.job_ref,description:j.description||'',customer:ord?ord.client:'—',orderDate:ord?ord.received:'',requiredDate:ord?ord.due:''};
+  renderPlanModal(j,planStages(j),{table:'job_cards',doneTab:'jc',meta:meta});
 }
 
 function oPlanNew(){
@@ -1160,13 +1167,15 @@ function oPlanNew(){
   var opts=avail.map(function(o){return '<option value="'+o.ref+'">'+o.ref+' — '+o.client+'</option>';}).join('');
   openM('<div class="mtitle">New Job Plan</div>'
   +'<div class="mfr"><label>Order number (MM ref)</label><select id="mPj">'+opts+'</select></div>'
+  +'<div class="mfr"><label>Description</label><input id="mPd" placeholder="e.g. Pipe support brackets"></div>'
   +'<p style="font-size:11px;color:var(--muted);margin-bottom:8px">The 10 standard stages (Draughting → Inspection) will be added automatically — edit dates and owners once it opens.</p>'
   +'<div class="mfoot"><button class="btn" id="cancelPlanNew">Cancel</button><button class="btn btn-p" id="createPlanNew">Create plan</button></div>');
   document.getElementById('cancelPlanNew').addEventListener('click',closeM);
   document.getElementById('createPlanNew').addEventListener('click',function(){
     var jobRef=gv('mPj');
+    var desc=gv('mPd');
     var stages=STAGE_TEMPLATE.map(function(s){return {name:s.name,hod:s.hod,start:'',end:'',status:'Not Started',notes:''};});
-    dbPost('job_plans',{job_ref:jobRef,plan_data:JSON.stringify(stages)})
+    dbPost('job_plans',{job_ref:jobRef,description:desc,plan_data:JSON.stringify(stages)})
       .then(function(){return loadAll();})
       .then(function(){closeM();go('planner');toast('Plan created — set your dates','s');})
       .catch(function(e){toast(e.message,'e');});
@@ -1177,34 +1186,79 @@ function oPlanEdit(id){
   var p=null;for(var i=0;i<plans.length;i++){if(String(plans[i].id)===String(id)){p=plans[i];break;}}
   if(!p){toast('Plan not found','e');return;}
   var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===p.job_ref){ord=orders[i];break;}}
-  var header='Job Plan — '+p.job_ref+(ord?' &nbsp;<span style="color:var(--muted);font-weight:400">('+ord.client+')</span>':'');
-  renderPlanModal(p,planStages(p),{table:'job_plans',header:header,doneTab:'planner'});
+  var meta={jobNumber:p.job_ref,description:p.description||'',customer:ord?ord.client:'—',orderDate:ord?ord.received:'',requiredDate:ord?ord.due:''};
+  renderPlanModal(p,planStages(p),{table:'job_plans',doneTab:'planner',meta:meta});
+}
+
+function planDays(s){
+  if(!s.start||!s.end)return '';
+  var d=Math.round((new Date(s.end+'T00:00:00')-new Date(s.start+'T00:00:00'))/86400000);
+  return d>=0?d:'';
 }
 
 function renderPlanModal(rec,stages,cfg){
   var t=td();
+  var total=stages.length||1;
+  var done=stages.filter(function(s){return s.status==='Complete';}).length;
+  var pct=Math.round(done/total*100);
+  var overdueCount=stages.filter(function(s){return s.status!=='Complete'&&s.end&&s.end<t;}).length;
+  var m=cfg.meta||{};
+
   var rows=stages.map(function(s,i){
     var overdue=s.status!=='Complete'&&s.end&&s.end<t;
     return '<tr>'
+      +'<td style="white-space:nowrap;color:#cbd2d9">'
+        +'<button class="pl-move" data-i="'+i+'" data-dir="-1" title="Move up" '+(i===0?'disabled style="opacity:.25"':'')+'>&#9650;</button> '
+        +'<button class="pl-move" data-i="'+i+'" data-dir="1" title="Move down" '+(i===stages.length-1?'disabled style="opacity:.25"':'')+'>&#9660;</button>'
+      +'</td>'
       +'<td><input class="pl-name" data-i="'+i+'" value="'+(s.name||'')+'" style="width:130px;font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
       +'<td><select class="pl-hod" data-i="'+i+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px">'+ownerOptionsHTML(s.hod)+'</select></td>'
       +'<td><input type="date" class="pl-start" data-i="'+i+'" value="'+(s.start||'')+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
       +'<td><input type="date" class="pl-end" data-i="'+i+'" value="'+(s.end||'')+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px'+(overdue?';color:#c53030;font-weight:700;border-color:#fc8181':'')+'"></td>'
+      +'<td class="pl-days-cell" data-i="'+i+'" style="font-size:11px;text-align:center;color:var(--muted)">'+planDays(s)+'</td>'
       +'<td><select class="pl-status" data-i="'+i+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px">'+PLAN_STATUS.map(function(st){return '<option'+(s.status===st?' selected':'')+'>'+st+'</option>';}).join('')+'</select></td>'
-      +'<td>'+(overdue?'<span class="badge b-lost">Overdue</span>':'')+'</td>'
+      +'<td><input class="pl-notes" data-i="'+i+'" value="'+(s.notes||'').replace(/"/g,'&quot;')+'" placeholder="—" style="width:140px;font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
+      +'<td class="pl-overdue-cell" data-i="'+i+'">'+(overdue?'<span class="badge b-lost">Overdue</span>':'')+'</td>'
       +'<td><button class="btn-d" data-i="'+i+'" data-plact="rm" title="Remove stage">&#10005;</button></td>'
       +'</tr>';
   }).join('');
 
-  var overdueCount=stages.filter(function(s){return s.status!=='Complete'&&s.end&&s.end<t;}).length;
+  function metaCell(label,val){return '<div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">'+label+'</div><div style="font-size:13px;font-weight:600">'+(val||'—')+'</div></div>';}
 
-  openM('<div class="mtitle">'+cfg.header+(overdueCount?' <span class="badge b-lost" style="margin-left:8px">'+overdueCount+' overdue</span>':'')+'</div>'
-  +'<div class="tw" style="margin-bottom:8px"><table><thead><tr><th>Stage</th><th>Owner</th><th>Start</th><th>End</th><th>Status</th><th></th><th></th></tr></thead><tbody id="planRows">'+rows+'</tbody></table></div>'
+  openM('<div class="mtitle">Job Plan — '+m.jobNumber+(overdueCount?' <span class="badge b-lost" style="margin-left:8px">'+overdueCount+' overdue</span>':'')+'</div>'
+  +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px 16px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">'
+    +metaCell('Job number',m.jobNumber)+metaCell('Description',m.description)+metaCell('Customer',m.customer)+metaCell('Progress',pct+'% complete')
+    +metaCell('Order date',m.orderDate?fd(m.orderDate):'')+metaCell('Required by',m.requiredDate?fd(m.requiredDate):'')
+  +'</div>'
+  +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+    +'<div style="display:flex;gap:4px">'
+      +'<button class="ptab active" id="ptabGrid">Plan grid</button>'
+      +'<button class="ptab" id="ptabGantt">Gantt view</button>'
+    +'</div>'
+    +'<button class="btn btn-g" id="printPlanBtn" style="font-size:11px">&#128438; Print</button>'
+  +'</div>'
+  +'<div id="planGridWrap">'
+  +'<div class="tw" style="margin-bottom:8px"><table><thead><tr><th></th><th>Stage</th><th>Owner</th><th>Start</th><th>End</th><th>Days</th><th>Status</th><th>Notes</th><th></th><th></th></tr></thead><tbody id="planRows">'+rows+'</tbody></table></div>'
   +'<button class="btn btn-g" id="addPlanRow" style="margin-bottom:16px;font-size:11px">+ Add stage</button>'
-  +'<div id="planGantt" style="margin-bottom:6px"></div>'
-  +'<div class="mfoot"><button class="btn" id="cancelPlan">Close</button><button class="btn btn-p" id="savePlan">Save plan</button></div>');
+  +'</div>'
+  +'<div id="planGanttWrap" style="display:none"></div>'
+  +'<div class="mfoot"><button class="btn" id="cancelPlan">Close</button><button class="btn btn-p" id="savePlan">Save plan</button></div>',true);
 
-  renderMiniGantt(stages);
+  document.getElementById('ptabGrid').addEventListener('click',function(){
+    document.getElementById('planGridWrap').style.display='';
+    document.getElementById('planGanttWrap').style.display='none';
+    this.classList.add('active');document.getElementById('ptabGantt').classList.remove('active');
+  });
+  document.getElementById('ptabGantt').addEventListener('click',function(){
+    document.getElementById('planGridWrap').style.display='none';
+    document.getElementById('planGanttWrap').style.display='';
+    this.classList.add('active');document.getElementById('ptabGrid').classList.remove('active');
+    renderMiniGantt(stages);
+  });
+  document.getElementById('printPlanBtn').addEventListener('click',function(){
+    syncPlanFromInputs(stages);
+    printPlan(m,stages,pct);
+  });
 
   document.getElementById('cancelPlan').addEventListener('click',closeM);
   document.getElementById('addPlanRow').addEventListener('click',function(){
@@ -1213,8 +1267,14 @@ function renderPlanModal(rec,stages,cfg){
     renderPlanModal(rec,stages,cfg);
   });
   document.getElementById('planRows').addEventListener('click',function(e){
-    var b=e.target.closest('[data-plact="rm"]');
-    if(b){syncPlanFromInputs(stages);stages.splice(+b.getAttribute('data-i'),1);renderPlanModal(rec,stages,cfg);}
+    var rm=e.target.closest('[data-plact="rm"]');
+    if(rm){syncPlanFromInputs(stages);stages.splice(+rm.getAttribute('data-i'),1);renderPlanModal(rec,stages,cfg);return;}
+    var mv=e.target.closest('.pl-move');
+    if(mv&&!mv.disabled){
+      syncPlanFromInputs(stages);
+      var i=+mv.getAttribute('data-i'),dir=+mv.getAttribute('data-dir'),j2=i+dir;
+      if(j2>=0&&j2<stages.length){var tmp=stages[i];stages[i]=stages[j2];stages[j2]=tmp;renderPlanModal(rec,stages,cfg);}
+    }
   });
   document.getElementById('planRows').addEventListener('change',function(e){
     if(e.target.classList.contains('pl-hod')&&e.target.value==='__add__'){
@@ -1234,8 +1294,7 @@ function renderPlanModal(rec,stages,cfg){
       return;
     }
     syncPlanFromInputs(stages);
-    var g=document.getElementById('planGantt');
-    if(g)renderMiniGantt(stages);
+    refreshComputedCells(stages);
   });
   document.getElementById('savePlan').addEventListener('click',function(){
     syncPlanFromInputs(stages);
@@ -1244,6 +1303,21 @@ function renderPlanModal(rec,stages,cfg){
       .then(function(){closeM();go(cfg.doneTab);toast('Plan saved','s');})
       .catch(function(e){toast(e.message,'e');});
   });
+}
+
+function refreshComputedCells(stages){
+  var t=td();
+  stages.forEach(function(s,i){
+    var dc=document.querySelector('.pl-days-cell[data-i="'+i+'"]');
+    if(dc)dc.textContent=planDays(s);
+    var oc=document.querySelector('.pl-overdue-cell[data-i="'+i+'"]');
+    var overdue=s.status!=='Complete'&&s.end&&s.end<t;
+    if(oc)oc.innerHTML=overdue?'<span class="badge b-lost">Overdue</span>':'';
+    var endInput=document.querySelector('.pl-end[data-i="'+i+'"]');
+    if(endInput){endInput.style.color=overdue?'#c53030':'';endInput.style.fontWeight=overdue?'700':'';endInput.style.borderColor=overdue?'#fc8181':'';}
+  });
+  var g=document.getElementById('planGanttWrap');
+  if(g&&g.style.display!=='none')renderMiniGantt(stages);
 }
 
 function syncPlanFromInputs(stages){
@@ -1255,15 +1329,16 @@ function syncPlanFromInputs(stages){
     stages[i].start=tr.querySelector('.pl-start').value;
     stages[i].end=tr.querySelector('.pl-end').value;
     stages[i].status=tr.querySelector('.pl-status').value;
+    stages[i].notes=tr.querySelector('.pl-notes').value;
   });
 }
 
 function renderMiniGantt(stages){
-  var g=document.getElementById('planGantt');
+  var g=document.getElementById('planGanttWrap');
   if(!g)return;
   var dates=[];
   stages.forEach(function(s){if(s.start)dates.push(s.start);if(s.end)dates.push(s.end);});
-  if(!dates.length){g.innerHTML='<p style="font-size:11px;color:var(--muted)">Add start/end dates above to see the Gantt chart.</p>';return;}
+  if(!dates.length){g.innerHTML='<p style="font-size:11px;color:var(--muted)">Add start/end dates in the grid to see the Gantt chart.</p>';return;}
   dates.sort();
   var min=new Date(dates[0]+'T00:00:00'),max=new Date(dates[dates.length-1]+'T00:00:00');
   min.setDate(min.getDate()-1);max.setDate(max.getDate()+1);
@@ -1288,6 +1363,59 @@ function renderMiniGantt(stages){
     +'<div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--muted)">'
     +Object.keys(colors).map(function(k){return '<span><span style="display:inline-block;width:8px;height:8px;background:'+colors[k]+';border-radius:2px;margin-right:3px"></span>'+k+'</span>';}).join('')
     +'</div></div>';
+}
+
+function printPlan(m,stages,pct){
+  var t=td();
+  var rows=stages.map(function(s,i){
+    var overdue=s.status!=='Complete'&&s.end&&s.end<t;
+    return '<tr>'
+      +'<td style="color:#718096">'+(i+1)+'</td>'
+      +'<td style="font-weight:600">'+s.name+'</td>'
+      +'<td>'+s.hod+'</td>'
+      +'<td>'+(s.start?fd(s.start):'—')+'</td>'
+      +'<td'+(overdue?' style="color:#c53030;font-weight:700"':'')+'>'+(s.end?fd(s.end):'—')+'</td>'
+      +'<td style="text-align:center">'+(planDays(s)||'—')+'</td>'
+      +'<td>'+s.status+(overdue?' (Overdue)':'')+'</td>'
+      +'<td style="font-size:10px">'+(s.notes||'')+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8">'
+  +'<title>Job Plan '+m.jobNumber+'</title>'
+  +'<style>'
+  +'@page{size:A4 landscape;margin:12mm}'
+  +'*{box-sizing:border-box;margin:0;padding:0}'
+  +'body{font-family:Arial,sans-serif;font-size:11px;color:#000;padding:16px}'
+  +'.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f1923;padding-bottom:10px;margin-bottom:12px}'
+  +'.company{font-size:16px;font-weight:700;color:#0f1923}'
+  +'.doc-title{font-size:20px;font-weight:700;color:#0f1923;text-align:right}'
+  +'.meta{display:grid;grid-template-columns:repeat(6,1fr);gap:0;border:1px solid #ccc;margin-bottom:14px}'
+  +'.mf{padding:6px 8px;border-right:1px solid #ccc}'
+  +'.mf:last-child{border-right:none}'
+  +'.mfl{font-size:8px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}'
+  +'table{width:100%;border-collapse:collapse}'
+  +'th{background:#0f1923;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:.04em;padding:6px;text-align:left}'
+  +'td{padding:6px;border-bottom:1px solid #e2e8f0;font-size:10px}'
+  +'.footer{display:flex;justify-content:space-between;margin-top:16px;font-size:9px;color:#718096;border-top:1px solid #ccc;padding-top:6px}'
+  +'</style></head><body>'
+  +'<div class="header"><div><div class="company">Mine Minerals Supplies &amp; Services</div><div style="font-size:9px;color:#718096">14 Vanadium Street, Rustenburg</div></div><div class="doc-title">Job Plan<div style="font-size:10px;color:#718096;font-weight:400">'+m.jobNumber+'</div></div></div>'
+  +'<div class="meta">'
+    +'<div class="mf"><div class="mfl">Job number</div>'+m.jobNumber+'</div>'
+    +'<div class="mf"><div class="mfl">Description</div>'+(m.description||'—')+'</div>'
+    +'<div class="mf"><div class="mfl">Customer</div>'+(m.customer||'—')+'</div>'
+    +'<div class="mf"><div class="mfl">Order date</div>'+(m.orderDate?fd(m.orderDate):'—')+'</div>'
+    +'<div class="mf"><div class="mfl">Required by</div>'+(m.requiredDate?fd(m.requiredDate):'—')+'</div>'
+    +'<div class="mf"><div class="mfl">Progress</div>'+pct+'% complete</div>'
+  +'</div>'
+  +'<table><thead><tr><th>#</th><th>Stage</th><th>Owner</th><th>Start</th><th>End</th><th>Days</th><th>Status</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>'
+  +'<div class="footer"><span>Mine Minerals Supplies &amp; Services | Job Plan | Doc Ref: MM-JP-001</span><span>Printed: '+new Date().toLocaleDateString('en-ZA')+'</span></div>'
+  +'<script>window.onload=function(){window.print();}<\/script>'
+  +'</body></html>';
+
+  var win=window.open('','_blank');
+  if(win){win.document.write(html);win.document.close();}
+  else{toast('Allow popups to print','e');}
 }
 
 function rPlanner(){
