@@ -2294,7 +2294,7 @@ function rLabourReport(){
   if(selBU)emps=emps.filter(function(e){return e.bu===selBU;});
 
   // Sort by efficiency ascending (worst first)
-  emps.sort(function(a,b){return (a.prodHrs/availHrsPerEmp)-(b.prodHrs/availHrsPerEmp);});
+  emps.sort(function(a,b){return (a.prodHrs/(progHrsPerEmp||1))-(b.prodHrs/(progHrsPerEmp||1));});
 
   // BU totals
   var buTotals={};
@@ -2309,7 +2309,7 @@ function rLabourReport(){
   var totalStand=emps.reduce(function(s,e){return s+e.standHrs;},0);
   var totalAvail=emps.length*availHrsPerEmp;
   var totalProgAvail=emps.length*progHrsPerEmp;
-  var overallEff=totalAvail>0?Math.round(totalProd/totalAvail*100):0;
+  var overallEff=totalProgAvail>0?Math.round(totalProd/totalProgAvail*100):0;
 
   var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -2322,8 +2322,8 @@ function rLabourReport(){
 
   var empRows=emps.map(function(e){
     var avail=availHrsPerEmp;
-    var unaccounted=Math.max(0,avail-e.prodHrs-e.standHrs);
-    var eff=avail>0?Math.round(e.prodHrs/avail*100):0;
+    var unaccounted=Math.max(0,progHrsPerEmp-e.prodHrs-e.standHrs);
+    var eff=progHrsPerEmp>0?Math.round(e.prodHrs/progHrsPerEmp*100):0;
     var effC=effColor(eff);
     return '<tr>'
     +'<td style="padding:8px 12px;font-weight:500;border-bottom:1px solid #f0f2f5">'+e.emp+'</td>'
@@ -2345,12 +2345,13 @@ function rLabourReport(){
   var buRows=Object.keys(buTotals).map(function(bu){
     var bt=buTotals[bu];
     var avail=bt.count*availHrsPerEmp;
-    var eff=avail>0?Math.round(bt.prodHrs/avail*100):0;
-    var unaccounted=Math.max(0,avail-bt.prodHrs-bt.standHrs);
+    var progAvail=bt.count*progHrsPerEmp;
+    var eff=progAvail>0?Math.round(bt.prodHrs/progAvail*100):0;
+    var unaccounted=Math.max(0,progAvail-bt.prodHrs-bt.standHrs);
     return '<tr style="background:#f8fafc">'
     +'<td style="padding:8px 12px;font-weight:700;border-bottom:1px solid #e2e8f0" colspan="2"><span class="badge b-bu">'+bu+'</span> Total ('+bt.count+' employees)</td>'
     +'<td style="padding:8px 12px;text-align:center;font-family:monospace;font-weight:700;border-bottom:1px solid #e2e8f0">'+avail+'</td>'
-    +'<td style="padding:8px 12px;text-align:center;font-family:monospace;font-weight:700;color:#4a5568;border-bottom:1px solid #e2e8f0">'+(bt.count*progHrsPerEmp)+'</td>'
+    +'<td style="padding:8px 12px;text-align:center;font-family:monospace;font-weight:700;color:#4a5568;border-bottom:1px solid #e2e8f0">'+progAvail+'</td>'
     +'<td style="padding:8px 12px;text-align:center;font-family:monospace;font-weight:700;color:#276749;border-bottom:1px solid #e2e8f0">'+bt.prodHrs+'</td>'
     +'<td style="padding:8px 12px;text-align:center;font-family:monospace;font-weight:700;color:#c53030;border-bottom:1px solid #e2e8f0">'+bt.standHrs+'</td>'
     +'<td style="padding:8px 12px;text-align:center;font-family:monospace;font-weight:700;color:#718096;border-bottom:1px solid #e2e8f0">'+unaccounted+'</td>'
@@ -2373,7 +2374,7 @@ function rLabourReport(){
   +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px;background:#f8fafc;border-bottom:1px solid var(--border)">'
   +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Working days</div><div style="font-size:22px;font-weight:700;font-family:monospace">'+workDays+'</div><div style="font-size:10px;color:#718096">Mon–Sat @ 8hrs</div></div>'
   +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Employees tracked</div><div style="font-size:22px;font-weight:700;font-family:monospace">'+emps.length+'</div><div style="font-size:10px;color:#718096">From WI entries</div></div>'
-  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Total productive hrs</div><div style="font-size:22px;font-weight:700;font-family:monospace;color:#276749">'+totalProd+'</div><div style="font-size:10px;color:#718096">of '+totalAvail+' available</div></div>'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Total productive hrs</div><div style="font-size:22px;font-weight:700;font-family:monospace;color:#276749">'+totalProd+'</div><div style="font-size:10px;color:#718096">of '+totalProgAvail+' available to date</div></div>'
   +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Overall efficiency</div><div style="font-size:22px;font-weight:700;font-family:monospace;color:'+effColor(overallEff)+'">'+overallEff+'%</div><div style="font-size:10px;color:#718096;margin-top:3px">'+effBar(overallEff)+'</div></div>'
   +'</div>'
   // Standing time alert
@@ -2391,7 +2392,7 @@ function rLabourReport(){
   +'<th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Efficiency %</th>'
   +'</tr></thead>'
   +'<tbody>'+empRows+'</tbody>'
-  +(emps.length>0?'<tfoot>'+buRows+'<tr style="background:var(--navy)"><td style="padding:10px 12px;font-weight:700;color:#fff" colspan="2">GRAND TOTAL</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fff">'+totalAvail+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#cbd5e0">'+totalProgAvail+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#a8f0c6">'+totalProd+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fca5a5">'+totalStand+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fde68a">'+Math.max(0,totalAvail-totalProd-totalStand)+'</td><td style="padding:10px 12px;font-weight:700;color:'+(overallEff>=80?'#a8f0c6':overallEff>=60?'#fde68a':'#fca5a5')+'">'+overallEff+'%</td></tr></tfoot>':'')
+  +(emps.length>0?'<tfoot>'+buRows+'<tr style="background:var(--navy)"><td style="padding:10px 12px;font-weight:700;color:#fff" colspan="2">GRAND TOTAL</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fff">'+totalAvail+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#cbd5e0">'+totalProgAvail+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#a8f0c6">'+totalProd+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fca5a5">'+totalStand+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fde68a">'+Math.max(0,totalProgAvail-totalProd-totalStand)+'</td><td style="padding:10px 12px;font-weight:700;color:'+(overallEff>=80?'#a8f0c6':overallEff>=60?'#fde68a':'#fca5a5')+'">'+overallEff+'%</td></tr></tfoot>':'')
   +'</table></div>'
   +(emps.length===0?'<div class="empty">No WI labour data found for '+monthNames[selMonth]+' '+selYear+(selBU?' — '+selBU:'')+'</div>':'')
   +'</div>';
