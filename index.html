@@ -2,16 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mine Minerals — Operations Platform</title>
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0f1923">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="MM Platform">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="icon" href="icons/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -82,10 +74,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .btn-won:hover{background:#1e5238}
 .btn-sm{font-size:11px;padding:3px 9px}
 .btn-g{background:none;border:none;padding:3px 6px;color:var(--muted);cursor:pointer;border-radius:4px;font-size:14px}.btn-g:hover{background:var(--bg);color:var(--text)}
-.ptab{background:none;border:1px solid var(--border);padding:5px 12px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;border-radius:6px}
-.ptab.active{background:var(--navy);color:#fff;border-color:var(--navy)}
-.pl-move{background:none;border:none;color:#a0aec0;cursor:pointer;font-size:9px;padding:1px 2px;display:block;line-height:1.3}
-.pl-move:hover{color:var(--navy)}
 .btn-d{background:none;border:none;padding:3px 6px;color:#fc8181;cursor:pointer;border-radius:4px;font-size:14px}.btn-d:hover{background:var(--red-bg);color:var(--red)}
 .tw{overflow-x:auto;overflow-y:auto;max-height:520px}
 .sticky-col{position:sticky;right:0;background:#fff;box-shadow:-2px 0 4px rgba(0,0,0,.06)}
@@ -119,7 +107,6 @@ tr:hover td{background:#f8fafc}
 .ob{color:#c53030;font-weight:600}
 .mov{position:fixed;inset:0;background:rgba(10,18,26,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
 .mbox{background:#fff;border-radius:12px;padding:22px;width:100%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:92vh;overflow-y:auto}
-.mbox-wide{max-width:1180px}
 .mtitle{font-size:14px;font-weight:600;color:var(--navy);margin-bottom:15px;padding-bottom:12px;border-bottom:1px solid var(--border)}
 .f2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .mfr{margin-bottom:11px}
@@ -181,8 +168,8 @@ tr:hover td{background:#f8fafc}
     <button class="nbtn" data-tab="orders"><span class="npip"></span>Order Book</button>
     <button class="nbtn" data-tab="buyer"><span class="npip"></span>Buyer Sheet</button>
     <button class="nbtn" data-tab="fin" id="finTab"><span class="npip"></span>Finance</button>
+    <button class="nbtn" data-tab="reports"><span class="npip"></span>Reports</button>
     <button class="nbtn" data-tab="wi"><span class="npip"></span>Work Instructions</button>
-    <button class="nbtn" data-tab="planner" id="plannerTab"><span class="npip"></span>Planner</button>
     <button class="nbtn" data-tab="jcosting" id="jcostTab"><span class="npip"></span>Job Costing</button>
     <button class="nbtn" data-tab="lrates" id="lratesTab"><span class="npip"></span>Labour Rates</button>
   </div>
@@ -195,19 +182,6 @@ var KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im
 var RHDRS={'apikey':KEY,'Authorization':'Bearer '+KEY};
 var WHDRS={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'};
 var BUS=['Fabrication','Construction','Pumps','TMM','Motors','Wear Protection','Mining Supplies','Laser Cutting'];
-var HODS=['Spies','Tony','Bennet','Gaily','Bennie','Tawanda','Lize','John'];
-function getExtraOwners(){try{return JSON.parse(localStorage.getItem('mm_extra_owners')||'[]');}catch(e){return [];}}
-function saveExtraOwner(name){var ex=getExtraOwners();if(ex.indexOf(name)<0){ex.push(name);localStorage.setItem('mm_extra_owners',JSON.stringify(ex));}}
-function ownerOptionsHTML(selected){
-  var all=HODS.concat(getExtraOwners().filter(function(n){return HODS.indexOf(n)<0;}));
-  if(selected&&all.indexOf(selected)<0)all.push(selected);
-  return all.map(function(h){return '<option'+(selected===h?' selected':'')+'>'+h+'</option>';}).join('')+'<option value="__add__">+ Add person...</option>';
-}
-var STAGE_TEMPLATE=[{name:'Draughting',hod:'John'},{name:'Procurement',hod:'Spies'},{name:'Saw',hod:'Bennet'},{name:'Laser',hod:'Lize'},{name:'Fit up',hod:'Bennet'},{name:'Welding',hod:'Bennet'},{name:'Fettle',hod:'Bennet'},{name:'Sandblast',hod:'Gaily'},{name:'Corrosion Protection',hod:'Gaily'},{name:'Inspection',hod:'Tawanda'}];
-var PLAN_STATUS=['Not Started','In Progress','Delayed','On Hold','Complete'];
-function planBadge(s){return s==='Complete'?'b-done':s==='In Progress'?'b-prog':s==='Delayed'?'b-lost':s==='On Hold'?'b-inv':'b-open';}
-function planStages(j){return j.plan_data?JSON.parse(j.plan_data):STAGE_TEMPLATE.map(function(s){return {name:s.name,hod:s.hod,start:'',end:'',status:'Not Started',notes:''};});}
-function planOverdueCount(j){var st=planStages(j),t=td();return st.filter(function(s){return s.status!=='Complete'&&s.end&&s.end<t;}).length;}
 var USERS=[
   {u:'martin',p:'MM@Admin2026',name:'Martin Spies',role:'CEO'},
   {u:'estimator',p:'MM@Est2026',name:'Estimator',role:'Estimator'},
@@ -221,7 +195,7 @@ var USERS=[
   {u:'wearhod',p:'MM@Wear2026',name:'Wear HOD',role:'HOD',bu:'Wear Protection'},
   {u:'planner',p:'MM@Plan2026',name:'Planner',role:'Planner'}
 ];
-var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],plans=[],cUser=null;
+var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],cUser=null;
 
 function dbGet(t,q){
   var url=SB+'/rest/v1/'+t+'?order=created_at.desc'+(q?'&'+q:'');
@@ -245,8 +219,8 @@ function dbDel(t,q){
 
 function loadAll(){
   sync(true,'Loading...');
-  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];}),dbGet('work_instructions').catch(function(){return[];}),dbGet('job_plans').catch(function(){return[];})]).then(function(res){
-    leads=res[0];orders=res[1];spos=res[2];jcs=[];invs=res[3];lrates=res[4]||[];wis=res[5]||[];plans=res[6]||[];
+  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];}),dbGet('work_instructions').catch(function(){return[];})]).then(function(res){
+    leads=res[0];orders=res[1];spos=res[2];jcs=[];invs=res[3];lrates=res[4]||[];wis=res[5]||[];
     sync(false,'Live');
   }).catch(function(e){sync(false,'Error',true);toast('Load error: '+e.message,'e');});
 }
@@ -331,11 +305,11 @@ function sync(on,lbl,err){
   d.className='sdot'+(on?' syncing':err?' err':'');
   l.textContent=lbl;
 }
-function openM(html,wide){
+function openM(html){
   closeM();
   var el=document.createElement('div');
   el.className='mov';el.id='mov';
-  el.innerHTML='<div class="mbox'+(wide?' mbox-wide':'')+'">'+html+'</div>';
+  el.innerHTML='<div class="mbox">'+html+'</div>';
   el.addEventListener('click',function(e){if(e.target===el)closeM();});
   document.body.appendChild(el);
 }
@@ -356,7 +330,7 @@ function xlx(data,cols,file,sheet){
 }
 
 function go(tab){
-  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,fin:rFin,wi:rWI,jcosting:rJobCosting,lrates:rLRates,planner:rPlanner};
+  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,fin:rFin,wi:rWI,jcosting:rJobCosting,lrates:rLRates,reports:rReports};
   var body=document.getElementById('body');
   body.innerHTML=renders[tab]?renders[tab]():'';
   if(tab==='leads')setTimeout(fLeads,0);
@@ -587,8 +561,7 @@ function fJCs(){
   tb.innerHTML=f.map(function(j){
     var bH=+j.budget_hrs||0,aH=+j.actual_hrs||0,bM=+j.mat_budget||0,aM=+j.mat_actual||0;
     var hV=aH-bH,mV=aM-bM;
-    var pOver=planOverdueCount(j);
-    return '<tr><td class="mono">'+j.jcref+'</td><td class="mono">'+j.job_ref+'</td><td><span class="badge b-bu">'+j.bu+'</span></td><td style="white-space:normal;font-size:11px;line-height:1.4">'+j.description+'</td><td>'+j.assigned+'</td><td class="mono">'+bH+'</td><td class="mono '+(aH>bH?'ob':'')+'">'+aH+'</td><td class="'+(hV>0?'pn':hV<0?'pp':'mono')+'">'+(hV===0?'—':(hV>0?'+':'')+hV)+'</td><td class="mono">'+R(bM)+'</td><td class="mono '+(aM>bM?'ob':'')+'">'+R(aM)+'</td><td class="'+(mV>0?'pn':mV<0?'pp':'mono')+'">'+(mV===0?'—':(mV>0?'+':'')+R(Math.abs(mV)))+'</td><td>'+obadge(j.status)+(aH>bH||aM>bM?' <span style="color:#c53030;font-size:11px">&#9888;</span>':'')+'</td><td class="sticky-col" style="white-space:nowrap"><button class="btn-g" data-id="'+j.id+'" data-action="planJC" title="Job plan">&#128197;'+(pOver?' <span style="color:#c53030;font-weight:700">'+pOver+'</span>':'')+'</button> <button class="btn-g" data-id="'+j.id+'" data-action="editJC">&#9998;</button> <button class="btn-d" data-id="'+j.id+'" data-action="delJC">&#10005;</button></td></tr>';
+    return '<tr><td class="mono">'+j.jcref+'</td><td class="mono">'+j.job_ref+'</td><td><span class="badge b-bu">'+j.bu+'</span></td><td style="white-space:normal;font-size:11px;line-height:1.4">'+j.description+'</td><td>'+j.assigned+'</td><td class="mono">'+bH+'</td><td class="mono '+(aH>bH?'ob':'')+'">'+aH+'</td><td class="'+(hV>0?'pn':hV<0?'pp':'mono')+'">'+(hV===0?'—':(hV>0?'+':'')+hV)+'</td><td class="mono">'+R(bM)+'</td><td class="mono '+(aM>bM?'ob':'')+'">'+R(aM)+'</td><td class="'+(mV>0?'pn':mV<0?'pp':'mono')+'">'+(mV===0?'—':(mV>0?'+':'')+R(Math.abs(mV)))+'</td><td>'+obadge(j.status)+(aH>bH||aM>bM?' <span style="color:#c53030;font-size:11px">&#9888;</span>':'')+'</td><td class="sticky-col" style="white-space:nowrap"><button class="btn-g" data-id="'+j.id+'" data-action="editJC">&#9998;</button> <button class="btn-d" data-id="'+j.id+'" data-action="delJC">&#10005;</button></td></tr>';
   }).join('');
 }
 
@@ -1148,319 +1121,6 @@ function oJCFull(editId){
       pr.then(function(){closeM();return loadAll();}).then(function(){go('jc');toast(editId?'Job card updated':'Job card saved','s');}).catch(function(e){toast(e.message,'e');});
     });
   },100);
-}
-
-// ── JOB PLAN (Draughting → Inspection stage tracker) ─────────────────────────
-// Used both from the legacy Job Card page and the new top-level Planner tab.
-function oJCPlan(id){
-  var j=null;for(var i=0;i<jcs.length;i++){if(String(jcs[i].id)===String(id)){j=jcs[i];break;}}
-  if(!j){toast('Job card not found','e');return;}
-  var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===j.job_ref){ord=orders[i];break;}}
-  var meta={jobNumber:j.job_ref,description:j.description||'',customer:ord?ord.client:'—',orderDate:ord?ord.received:'',requiredDate:ord?ord.due:''};
-  renderPlanModal(j,planStages(j),{table:'job_cards',doneTab:'jc',meta:meta});
-}
-
-function oPlanNew(){
-  var used={};plans.forEach(function(p){used[p.job_ref]=true;});
-  var avail=orders.filter(function(o){return !o.invoiced&&o.status!=='Completed'&&!used[o.ref];});
-  if(!avail.length){toast('No open orders without a plan yet','e');return;}
-  var opts=avail.map(function(o){return '<option value="'+o.ref+'">'+o.ref+' — '+o.client+'</option>';}).join('');
-  openM('<div class="mtitle">New Job Plan</div>'
-  +'<div class="mfr"><label>Order number (MM ref)</label><select id="mPj">'+opts+'</select></div>'
-  +'<div class="mfr"><label>Description</label><input id="mPd" placeholder="e.g. Pipe support brackets"></div>'
-  +'<p style="font-size:11px;color:var(--muted);margin-bottom:8px">The 10 standard stages (Draughting → Inspection) will be added automatically — edit dates and owners once it opens.</p>'
-  +'<div class="mfoot"><button class="btn" id="cancelPlanNew">Cancel</button><button class="btn btn-p" id="createPlanNew">Create plan</button></div>');
-  document.getElementById('cancelPlanNew').addEventListener('click',closeM);
-  document.getElementById('createPlanNew').addEventListener('click',function(){
-    var jobRef=gv('mPj');
-    var desc=gv('mPd');
-    var stages=STAGE_TEMPLATE.map(function(s){return {name:s.name,hod:s.hod,start:'',end:'',status:'Not Started',notes:''};});
-    dbPost('job_plans',{job_ref:jobRef,description:desc,plan_data:JSON.stringify(stages)})
-      .then(function(){return loadAll();})
-      .then(function(){closeM();go('planner');toast('Plan created — set your dates','s');})
-      .catch(function(e){toast(e.message,'e');});
-  });
-}
-
-function oPlanEdit(id){
-  var p=null;for(var i=0;i<plans.length;i++){if(String(plans[i].id)===String(id)){p=plans[i];break;}}
-  if(!p){toast('Plan not found','e');return;}
-  var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===p.job_ref){ord=orders[i];break;}}
-  var meta={jobNumber:p.job_ref,description:p.description||'',customer:ord?ord.client:'—',orderDate:ord?ord.received:'',requiredDate:ord?ord.due:''};
-  renderPlanModal(p,planStages(p),{table:'job_plans',doneTab:'planner',meta:meta});
-}
-
-function planDays(s){
-  if(!s.start||!s.end)return '';
-  var d=Math.round((new Date(s.end+'T00:00:00')-new Date(s.start+'T00:00:00'))/86400000);
-  return d>=0?d:'';
-}
-
-function renderPlanModal(rec,stages,cfg){
-  var t=td();
-  var total=stages.length||1;
-  var done=stages.filter(function(s){return s.status==='Complete';}).length;
-  var pct=Math.round(done/total*100);
-  var overdueCount=stages.filter(function(s){return s.status!=='Complete'&&s.end&&s.end<t;}).length;
-  var m=cfg.meta||{};
-
-  var rows=stages.map(function(s,i){
-    var overdue=s.status!=='Complete'&&s.end&&s.end<t;
-    return '<tr>'
-      +'<td style="white-space:nowrap;color:#cbd2d9">'
-        +'<button class="pl-move" data-i="'+i+'" data-dir="-1" title="Move up" '+(i===0?'disabled style="opacity:.25"':'')+'>&#9650;</button> '
-        +'<button class="pl-move" data-i="'+i+'" data-dir="1" title="Move down" '+(i===stages.length-1?'disabled style="opacity:.25"':'')+'>&#9660;</button>'
-      +'</td>'
-      +'<td><input class="pl-name" data-i="'+i+'" value="'+(s.name||'')+'" style="width:130px;font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
-      +'<td><select class="pl-hod" data-i="'+i+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px">'+ownerOptionsHTML(s.hod)+'</select></td>'
-      +'<td><input type="date" class="pl-start" data-i="'+i+'" value="'+(s.start||'')+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
-      +'<td><input type="date" class="pl-end" data-i="'+i+'" value="'+(s.end||'')+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px'+(overdue?';color:#c53030;font-weight:700;border-color:#fc8181':'')+'"></td>'
-      +'<td class="pl-days-cell" data-i="'+i+'" style="font-size:11px;text-align:center;color:var(--muted)">'+planDays(s)+'</td>'
-      +'<td><select class="pl-status" data-i="'+i+'" style="font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px">'+PLAN_STATUS.map(function(st){return '<option'+(s.status===st?' selected':'')+'>'+st+'</option>';}).join('')+'</select></td>'
-      +'<td><input class="pl-notes" data-i="'+i+'" value="'+(s.notes||'').replace(/"/g,'&quot;')+'" placeholder="—" style="width:140px;font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
-      +'<td class="pl-overdue-cell" data-i="'+i+'">'+(overdue?'<span class="badge b-lost">Overdue</span>':'')+'</td>'
-      +'<td><button class="btn-d" data-i="'+i+'" data-plact="rm" title="Remove stage">&#10005;</button></td>'
-      +'</tr>';
-  }).join('');
-
-  function metaCell(label,val){return '<div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">'+label+'</div><div style="font-size:13px;font-weight:600">'+(val||'—')+'</div></div>';}
-
-  openM('<div class="mtitle">Job Plan — '+m.jobNumber+(overdueCount?' <span class="badge b-lost" style="margin-left:8px">'+overdueCount+' overdue</span>':'')+'</div>'
-  +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px 16px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)">'
-    +metaCell('Job number',m.jobNumber)+metaCell('Description',m.description)+metaCell('Customer',m.customer)+metaCell('Progress',pct+'% complete')
-    +metaCell('Order date',m.orderDate?fd(m.orderDate):'')+metaCell('Required by',m.requiredDate?fd(m.requiredDate):'')
-  +'</div>'
-  +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-    +'<div style="display:flex;gap:4px">'
-      +'<button class="ptab active" id="ptabGrid">Plan grid</button>'
-      +'<button class="ptab" id="ptabGantt">Gantt view</button>'
-    +'</div>'
-    +'<button class="btn btn-g" id="printPlanBtn" style="font-size:11px">&#128438; Print</button>'
-  +'</div>'
-  +'<div id="planGridWrap">'
-  +'<div class="tw" style="margin-bottom:8px"><table><thead><tr><th></th><th>Stage</th><th>Owner</th><th>Start</th><th>End</th><th>Days</th><th>Status</th><th>Notes</th><th></th><th></th></tr></thead><tbody id="planRows">'+rows+'</tbody></table></div>'
-  +'<button class="btn btn-g" id="addPlanRow" style="margin-bottom:16px;font-size:11px">+ Add stage</button>'
-  +'</div>'
-  +'<div id="planGanttWrap" style="display:none"></div>'
-  +'<div class="mfoot"><button class="btn" id="cancelPlan">Close</button><button class="btn btn-p" id="savePlan">Save plan</button></div>',true);
-
-  document.getElementById('ptabGrid').addEventListener('click',function(){
-    document.getElementById('planGridWrap').style.display='';
-    document.getElementById('planGanttWrap').style.display='none';
-    this.classList.add('active');document.getElementById('ptabGantt').classList.remove('active');
-  });
-  document.getElementById('ptabGantt').addEventListener('click',function(){
-    document.getElementById('planGridWrap').style.display='none';
-    document.getElementById('planGanttWrap').style.display='';
-    this.classList.add('active');document.getElementById('ptabGrid').classList.remove('active');
-    renderMiniGantt(stages);
-  });
-  document.getElementById('printPlanBtn').addEventListener('click',function(){
-    syncPlanFromInputs(stages);
-    printPlan(m,stages,pct);
-  });
-
-  document.getElementById('cancelPlan').addEventListener('click',closeM);
-  document.getElementById('addPlanRow').addEventListener('click',function(){
-    syncPlanFromInputs(stages);
-    stages.push({name:'New stage',hod:HODS[0],start:'',end:'',status:'Not Started',notes:''});
-    renderPlanModal(rec,stages,cfg);
-  });
-  document.getElementById('planRows').addEventListener('click',function(e){
-    var rm=e.target.closest('[data-plact="rm"]');
-    if(rm){syncPlanFromInputs(stages);stages.splice(+rm.getAttribute('data-i'),1);renderPlanModal(rec,stages,cfg);return;}
-    var mv=e.target.closest('.pl-move');
-    if(mv&&!mv.disabled){
-      syncPlanFromInputs(stages);
-      var i=+mv.getAttribute('data-i'),dir=+mv.getAttribute('data-dir'),j2=i+dir;
-      if(j2>=0&&j2<stages.length){var tmp=stages[i];stages[i]=stages[j2];stages[j2]=tmp;renderPlanModal(rec,stages,cfg);}
-    }
-  });
-  document.getElementById('planRows').addEventListener('change',function(e){
-    if(e.target.classList.contains('pl-hod')&&e.target.value==='__add__'){
-      var name=prompt('Add person — enter name:');
-      if(name){
-        name=name.trim();
-        if(name){
-          saveExtraOwner(name);
-          syncPlanFromInputs(stages);
-          var i=+e.target.getAttribute('data-i');
-          stages[i].hod=name;
-          renderPlanModal(rec,stages,cfg);
-          return;
-        }
-      }
-      e.target.value=stages[+e.target.getAttribute('data-i')].hod;
-      return;
-    }
-    syncPlanFromInputs(stages);
-    refreshComputedCells(stages);
-  });
-  document.getElementById('savePlan').addEventListener('click',function(){
-    syncPlanFromInputs(stages);
-    dbPatch(cfg.table,'id=eq.'+rec.id,{plan_data:JSON.stringify(stages)})
-      .then(function(){return loadAll();})
-      .then(function(){closeM();go(cfg.doneTab);toast('Plan saved','s');})
-      .catch(function(e){toast(e.message,'e');});
-  });
-}
-
-function refreshComputedCells(stages){
-  var t=td();
-  stages.forEach(function(s,i){
-    var dc=document.querySelector('.pl-days-cell[data-i="'+i+'"]');
-    if(dc)dc.textContent=planDays(s);
-    var oc=document.querySelector('.pl-overdue-cell[data-i="'+i+'"]');
-    var overdue=s.status!=='Complete'&&s.end&&s.end<t;
-    if(oc)oc.innerHTML=overdue?'<span class="badge b-lost">Overdue</span>':'';
-    var endInput=document.querySelector('.pl-end[data-i="'+i+'"]');
-    if(endInput){endInput.style.color=overdue?'#c53030':'';endInput.style.fontWeight=overdue?'700':'';endInput.style.borderColor=overdue?'#fc8181':'';}
-  });
-  var g=document.getElementById('planGanttWrap');
-  if(g&&g.style.display!=='none')renderMiniGantt(stages);
-}
-
-function syncPlanFromInputs(stages){
-  var rows=document.querySelectorAll('#planRows tr');
-  rows.forEach(function(tr,i){
-    if(!stages[i])return;
-    stages[i].name=tr.querySelector('.pl-name').value;
-    stages[i].hod=tr.querySelector('.pl-hod').value;
-    stages[i].start=tr.querySelector('.pl-start').value;
-    stages[i].end=tr.querySelector('.pl-end').value;
-    stages[i].status=tr.querySelector('.pl-status').value;
-    stages[i].notes=tr.querySelector('.pl-notes').value;
-  });
-}
-
-function renderMiniGantt(stages){
-  var g=document.getElementById('planGanttWrap');
-  if(!g)return;
-  var dates=[];
-  stages.forEach(function(s){if(s.start)dates.push(s.start);if(s.end)dates.push(s.end);});
-  if(!dates.length){g.innerHTML='<p style="font-size:11px;color:var(--muted)">Add start/end dates in the grid to see the Gantt chart.</p>';return;}
-  dates.sort();
-  var min=new Date(dates[0]+'T00:00:00'),max=new Date(dates[dates.length-1]+'T00:00:00');
-  min.setDate(min.getDate()-2);max.setDate(max.getDate()+2);
-  var totalDays=Math.max(1,Math.round((max-min)/86400000));
-  var t=td();
-  function pct(d){var dt=new Date(d+'T00:00:00');return Math.min(100,Math.max(0,((dt-min)/86400000/totalDays)*100));}
-  var todayPct=pct(t);
-  var colors={'Not Started':'#a0aec0','In Progress':'#3182ce','Delayed':'#e53e3e','On Hold':'#dd6b20','Complete':'#38a169'};
-
-  var weekMarkers=[];
-  var cursor=new Date(min);
-  cursor.setDate(cursor.getDate()-cursor.getDay());
-  while(cursor<=max){weekMarkers.push(new Date(cursor));cursor.setDate(cursor.getDate()+7);}
-  var weekHtml=weekMarkers.map(function(w){
-    var iso=w.toISOString().slice(0,10);
-    var lbl=w.toLocaleDateString('en-ZA',{day:'2-digit',month:'short'});
-    return '<div style="position:absolute;left:'+pct(iso)+'%;top:0;transform:translateX(-50%);font-size:9px;color:var(--muted)">'+lbl+'</div>';
-  }).join('');
-
-  var barsHtml=stages.map(function(s){
-    var has=s.start&&s.end;
-    var left=has?pct(s.start):0,width=has?Math.max(1,pct(s.end)-pct(s.start)):0;
-    return '<div style="display:flex;align-items:center;gap:8px;padding:3px 0">'
-      +'<div style="width:120px;flex-shrink:0;font-size:10px;color:var(--text)">'+s.name+'</div>'
-      +'<div style="position:relative;flex:1;height:16px;background:#f4f6f9;border-radius:3px">'
-      +(has?'<div style="position:absolute;top:0;left:'+left+'%;width:'+width+'%;height:16px;background:'+(colors[s.status]||'#a0aec0')+';border-radius:3px;min-width:3px" title="'+s.name+': '+fd(s.start)+' \u2013 '+fd(s.end)+'"></div>':'')
-      +'</div></div>';
-  }).join('');
-  g.innerHTML='<div style="position:relative;padding-top:16px">'
-    +'<div style="position:relative;height:14px;margin:0 0 4px 128px">'+weekHtml+'</div>'
-    +'<div style="position:relative;height:1px;background:#e2e8f0;margin:0 0 4px 128px">'
-    +'<div style="position:absolute;top:-4px;left:'+todayPct+'%;width:1px;height:10px;border-left:1px dashed #e53e3e"></div>'
-    +'</div>'+barsHtml
-    +'<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:10px;color:var(--muted)">'
-    +Object.keys(colors).map(function(k){return '<span><span style="display:inline-block;width:8px;height:8px;background:'+colors[k]+';border-radius:2px;margin-right:3px"></span>'+k+'</span>';}).join('')
-    +'<span><span style="display:inline-block;width:8px;border-top:1px dashed #e53e3e;margin-right:3px"></span>Today</span>'
-    +'</div></div>';
-}
-
-function printPlan(m,stages,pct){
-  var t=td();
-  var rows=stages.map(function(s,i){
-    var overdue=s.status!=='Complete'&&s.end&&s.end<t;
-    return '<tr>'
-      +'<td style="color:#718096">'+(i+1)+'</td>'
-      +'<td style="font-weight:600">'+s.name+'</td>'
-      +'<td>'+s.hod+'</td>'
-      +'<td>'+(s.start?fd(s.start):'—')+'</td>'
-      +'<td'+(overdue?' style="color:#c53030;font-weight:700"':'')+'>'+(s.end?fd(s.end):'—')+'</td>'
-      +'<td style="text-align:center">'+(planDays(s)||'—')+'</td>'
-      +'<td>'+s.status+(overdue?' (Overdue)':'')+'</td>'
-      +'<td style="font-size:10px">'+(s.notes||'')+'</td>'
-      +'</tr>';
-  }).join('');
-
-  var html='<!DOCTYPE html><html><head><meta charset="UTF-8">'
-  +'<title>Job Plan '+m.jobNumber+'</title>'
-  +'<style>'
-  +'@page{size:A4 landscape;margin:12mm}'
-  +'*{box-sizing:border-box;margin:0;padding:0}'
-  +'body{font-family:Arial,sans-serif;font-size:11px;color:#000;padding:16px}'
-  +'.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f1923;padding-bottom:10px;margin-bottom:12px}'
-  +'.company{font-size:16px;font-weight:700;color:#0f1923}'
-  +'.doc-title{font-size:20px;font-weight:700;color:#0f1923;text-align:right}'
-  +'.meta{display:grid;grid-template-columns:repeat(6,1fr);gap:0;border:1px solid #ccc;margin-bottom:14px}'
-  +'.mf{padding:6px 8px;border-right:1px solid #ccc}'
-  +'.mf:last-child{border-right:none}'
-  +'.mfl{font-size:8px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}'
-  +'table{width:100%;border-collapse:collapse}'
-  +'th{background:#0f1923;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:.04em;padding:6px;text-align:left}'
-  +'td{padding:6px;border-bottom:1px solid #e2e8f0;font-size:10px}'
-  +'.footer{display:flex;justify-content:space-between;margin-top:16px;font-size:9px;color:#718096;border-top:1px solid #ccc;padding-top:6px}'
-  +'</style></head><body>'
-  +'<div class="header"><div><div class="company">Mine Minerals Supplies &amp; Services</div><div style="font-size:9px;color:#718096">14 Vanadium Street, Rustenburg</div></div><div class="doc-title">Job Plan<div style="font-size:10px;color:#718096;font-weight:400">'+m.jobNumber+'</div></div></div>'
-  +'<div class="meta">'
-    +'<div class="mf"><div class="mfl">Job number</div>'+m.jobNumber+'</div>'
-    +'<div class="mf"><div class="mfl">Description</div>'+(m.description||'—')+'</div>'
-    +'<div class="mf"><div class="mfl">Customer</div>'+(m.customer||'—')+'</div>'
-    +'<div class="mf"><div class="mfl">Order date</div>'+(m.orderDate?fd(m.orderDate):'—')+'</div>'
-    +'<div class="mf"><div class="mfl">Required by</div>'+(m.requiredDate?fd(m.requiredDate):'—')+'</div>'
-    +'<div class="mf"><div class="mfl">Progress</div>'+pct+'% complete</div>'
-  +'</div>'
-  +'<table><thead><tr><th>#</th><th>Stage</th><th>Owner</th><th>Start</th><th>End</th><th>Days</th><th>Status</th><th>Notes</th></tr></thead><tbody>'+rows+'</tbody></table>'
-  +'<div class="footer"><span>Mine Minerals Supplies &amp; Services | Job Plan | Doc Ref: MM-JP-001</span><span>Printed: '+new Date().toLocaleDateString('en-ZA')+'</span></div>'
-  +'<script>window.onload=function(){window.print();}<\/script>'
-  +'</body></html>';
-
-  var win=window.open('','_blank');
-  if(win){win.document.write(html);win.document.close();}
-  else{toast('Allow popups to print','e');}
-}
-
-function rPlanner(){
-  var t=td();
-  var rows=plans.map(function(p){
-    var st=planStages(p);
-    var total=st.length||1;
-    var done=st.filter(function(s){return s.status==='Complete';}).length;
-    var pct=Math.round(done/total*100);
-    var overdue=st.filter(function(s){return s.status!=='Complete'&&s.end&&s.end<t;}).length;
-    var current=st.filter(function(s){return s.status!=='Complete';})[0];
-    var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===p.job_ref){ord=orders[i];break;}}
-    return {p:p,st:st,pct:pct,overdue:overdue,current:current,ord:ord};
-  });
-  rows.sort(function(a,b){
-    if((a.overdue>0)!==(b.overdue>0))return a.overdue>0?-1:1;
-    return (a.ord&&a.ord.due||'9999').localeCompare(b.ord&&b.ord.due||'9999');
-  });
-  var atRisk=rows.filter(function(r){return r.overdue>0;}).length;
-
-  return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Active plans</div><div class="kpi-v">'+plans.length+'</div></div><div class="kpi '+(atRisk>0?'cr':'cg')+'"><div class="kpi-l">Jobs at risk</div><div class="kpi-v">'+atRisk+'</div><div class="kpi-s">Overdue stage(s)</div></div></div>'
-  +'<div class="card"><div class="card-hd"><h3>Job planner — order to Inspection</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addPlanBtn">+ New plan</button></div></div>'
-  +'<div class="tw"><table><thead><tr><th>Job #</th><th>Client</th><th>BU</th><th>Required by</th><th>Progress</th><th>Current stage</th><th>Actions</th></tr></thead><tbody>'
-  +rows.map(function(r){
-    var p=r.p,ord=r.ord;
-    return '<tr><td class="mono">'+p.job_ref+'</td><td>'+(ord?ord.client:'—')+'</td><td>'+(ord?'<span class="badge b-bu">'+ord.bu+'</span>':'—')+'</td><td class="mono">'+(ord&&ord.due?fd(ord.due):'—')+'</td>'
-    +'<td><div style="display:flex;align-items:center;gap:6px"><div style="width:70px;height:6px;background:#f0f1f3;border-radius:3px;overflow:hidden"><div style="width:'+r.pct+'%;height:6px;background:'+(r.overdue?'#e53e3e':'#3182ce')+'"></div></div><span style="font-size:11px;color:var(--muted)">'+r.pct+'%</span></div></td>'
-    +'<td style="font-size:11px">'+(r.current?r.current.name+' <span style="color:var(--muted)">('+r.current.hod+')</span>':'<span class="badge b-done">Complete</span>')+(r.overdue?' <span class="badge b-lost">'+r.overdue+' overdue</span>':'')+'</td>'
-    +'<td style="white-space:nowrap"><button class="btn-g" data-id="'+p.id+'" data-action="editPlan" style="font-size:11px;font-weight:600;color:var(--navy)">&#128197; Edit plan</button> <button class="btn-d" data-id="'+p.id+'" data-action="delPlan">&#10005;</button></td></tr>';
-  }).join('')
-  +(rows.length===0?'<tr><td colspan="7" class="empty">No job plans yet — click "+ New plan" as soon as an order comes in.</td></tr>':'')
-  +'</tbody></table></div></div>';
 }
 
 function oAPIKey(){
@@ -2218,6 +1878,188 @@ function onSubJobMasterChange(){
   if(refEl)refEl.value=autoRef;
 }
 
+
+// ── REPORTS ──────────────────────────────────────────────────────────────────
+function rReports(){
+  return '<div class="card"><div class="card-hd"><h3>Reports</h3></div>'
+  +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;padding:17px">'
+  +'<button class="report-card" id="rptLabourBtn" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px;text-align:left;cursor:pointer;transition:box-shadow .2s;box-shadow:0 1px 3px rgba(0,0,0,.05)">'
+  +'<div style="font-size:28px;margin-bottom:8px">👷</div>'
+  +'<div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:4px">Labour Efficiency Report</div>'
+  +'<div style="font-size:11px;color:#718096">Available vs worked hours per employee per month. Identifies productivity and standing time patterns.</div>'
+  +'</button>'
+  +'<div style="background:#f4f6f9;border:1px dashed #e2e8f0;border-radius:10px;padding:20px;text-align:left;opacity:.5">'
+  +'<div style="font-size:28px;margin-bottom:8px">📦</div>'
+  +'<div style="font-size:13px;font-weight:700;color:#718096;margin-bottom:4px">Materials Report</div>'
+  +'<div style="font-size:11px;color:#a0aec0">Coming soon</div>'
+  +'</div>'
+  +'<div style="background:#f4f6f9;border:1px dashed #e2e8f0;border-radius:10px;padding:20px;text-align:left;opacity:.5">'
+  +'<div style="font-size:28px;margin-bottom:8px">💰</div>'
+  +'<div style="font-size:13px;font-weight:700;color:#718096;margin-bottom:4px">Profitability Report</div>'
+  +'<div style="font-size:11px;color:#a0aec0">Coming soon</div>'
+  +'</div>'
+  +'<div style="background:#f4f6f9;border:1px dashed #e2e8f0;border-radius:10px;padding:20px;text-align:left;opacity:.5">'
+  +'<div style="font-size:28px;margin-bottom:8px">📊</div>'
+  +'<div style="font-size:13px;font-weight:700;color:#718096;margin-bottom:4px">BU Performance Report</div>'
+  +'<div style="font-size:11px;color:#a0aec0">Coming soon</div>'
+  +'</div>'
+  +'</div></div>'
+  +'<div id="reportContent"></div>';
+}
+
+function rLabourReport(){
+  var now=new Date();
+  var selMonth=document.getElementById('rptMonth')?+document.getElementById('rptMonth').value:now.getMonth();
+  var selYear=document.getElementById('rptYear')?+document.getElementById('rptYear').value:now.getFullYear();
+  var selBU=document.getElementById('rptBU')?document.getElementById('rptBU').value:'';
+
+  // Calculate working days in selected month (Mon-Sat, 8hrs each)
+  var daysInMonth=new Date(selYear,selMonth+1,0).getDate();
+  var workDays=0;
+  for(var d=1;d<=daysInMonth;d++){
+    var day=new Date(selYear,selMonth,d).getDay();
+    if(day>=1&&day<=6)workDays++; // Mon=1 to Sat=6
+  }
+  var availHrsPerEmp=workDays*8;
+
+  // Filter WIs for selected month/year
+  var monthWIs=wis.filter(function(w){
+    if(!w.start_date)return false;
+    var d=new Date(w.start_date);
+    return d.getMonth()===selMonth&&d.getFullYear()===selYear&&(!selBU||w.bu===selBU);
+  });
+
+  // Aggregate per employee
+  var empData={};
+  monthWIs.forEach(function(w){
+    var labData=w.labour_data?JSON.parse(w.labour_data):[];
+    var stData=w.standing_data?JSON.parse(w.standing_data):[];
+    labData.forEach(function(e){
+      if(!e.emp)return;
+      if(!empData[e.emp])empData[e.emp]={emp:e.emp,prodHrs:0,standHrs:0,bu:''};
+      var hrs=(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);
+      empData[e.emp].prodHrs+=hrs;
+      // Get BU from lrates
+      for(var i=0;i<lrates.length;i++){if(lrates[i].emp_name===e.emp){empData[e.emp].bu=lrates[i].bu;break;}}
+    });
+    stData.forEach(function(e){
+      if(!e.emp)return;
+      if(!empData[e.emp])empData[e.emp]={emp:e.emp,prodHrs:0,standHrs:0,bu:''};
+      var hrs=(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);
+      empData[e.emp].standHrs+=hrs;
+    });
+  });
+
+  var emps=Object.values(empData);
+  if(selBU)emps=emps.filter(function(e){return e.bu===selBU;});
+
+  // Sort by efficiency ascending (worst first)
+  emps.sort(function(a,b){return (a.prodHrs/availHrsPerEmp)-(b.prodHrs/availHrsPerEmp);});
+
+  // BU totals
+  var buTotals={};
+  emps.forEach(function(e){
+    if(!buTotals[e.bu])buTotals[e.bu]={prodHrs:0,standHrs:0,count:0};
+    buTotals[e.bu].prodHrs+=e.prodHrs;
+    buTotals[e.bu].standHrs+=e.standHrs;
+    buTotals[e.bu].count++;
+  });
+
+  var totalProd=emps.reduce(function(s,e){return s+e.prodHrs;},0);
+  var totalStand=emps.reduce(function(s,e){return s+e.standHrs;},0);
+  var totalAvail=emps.length*availHrsPerEmp;
+  var overallEff=totalAvail>0?Math.round(totalProd/totalAvail*100):0;
+
+  var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  function effColor(pct){return pct>=80?'#276749':pct>=60?'#d97706':'#c53030';}
+  function effBar(pct){
+    var c=effColor(pct);
+    var w=Math.min(pct,100);
+    return '<div style="background:#f0f2f5;border-radius:4px;height:6px;width:100%;margin-top:3px"><div style="background:'+c+';width:'+w+'%;height:6px;border-radius:4px"></div></div>';
+  }
+
+  var empRows=emps.map(function(e){
+    var avail=availHrsPerEmp;
+    var unaccounted=Math.max(0,avail-e.prodHrs-e.standHrs);
+    var eff=avail>0?Math.round(e.prodHrs/avail*100):0;
+    var effC=effColor(eff);
+    return '<tr>'
+    +'<td style="padding:8px 12px;font-weight:500;border-bottom:1px solid #f0f2f5">'+e.emp+'</td>'
+    +'<td style="padding:8px 12px;border-bottom:1px solid #f0f2f5"><span class="badge b-bu">'+e.bu+'</span></td>'
+    +'<td style="padding:8px 12px;text-align:center;font-family:monospace;border-bottom:1px solid #f0f2f5">'+avail+'</td>'
+    +'<td style="padding:8px 12px;text-align:center;font-family:monospace;font-weight:600;color:#276749;border-bottom:1px solid #f0f2f5">'+e.prodHrs+'</td>'
+    +'<td style="padding:8px 12px;text-align:center;font-family:monospace;color:#c53030;border-bottom:1px solid #f0f2f5">'+e.standHrs+'</td>'
+    +'<td style="padding:8px 12px;text-align:center;font-family:monospace;color:#718096;border-bottom:1px solid #f0f2f5">'+unaccounted+'</td>'
+    +'<td style="padding:8px 12px;border-bottom:1px solid #f0f2f5;min-width:100px">'
+    +'<div style="display:flex;align-items:center;gap:6px">'
+    +'<span style="font-weight:700;font-family:monospace;color:'+effC+'">'+eff+'%</span>'
+    +effBar(eff)
+    +'</div></td>'
+    +'</tr>';
+  }).join('');
+
+  // BU summary rows
+  var buRows=Object.keys(buTotals).map(function(bu){
+    var bt=buTotals[bu];
+    var avail=bt.count*availHrsPerEmp;
+    var eff=avail>0?Math.round(bt.prodHrs/avail*100):0;
+    var unaccounted=Math.max(0,avail-bt.prodHrs-bt.standHrs);
+    return '<tr style="background:#f8fafc">'
+    +'<td style="padding:8px 12px;font-weight:700;border-bottom:1px solid #e2e8f0" colspan="2"><span class="badge b-bu">'+bu+'</span> Total ('+bt.count+' employees)</td>'
+    +'<td style="padding:8px 12px;text-align:center;font-family:monospace;font-weight:700;border-bottom:1px solid #e2e8f0">'+avail+'</td>'
+    +'<td style="padding:8px 12px;text-align:center;font-family:monospace;font-weight:700;color:#276749;border-bottom:1px solid #e2e8f0">'+bt.prodHrs+'</td>'
+    +'<td style="padding:8px 12px;text-align:center;font-family:monospace;font-weight:700;color:#c53030;border-bottom:1px solid #e2e8f0">'+bt.standHrs+'</td>'
+    +'<td style="padding:8px 12px;text-align:center;font-family:monospace;font-weight:700;color:#718096;border-bottom:1px solid #e2e8f0">'+unaccounted+'</td>'
+    +'<td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;font-weight:700;color:'+effColor(eff)+'">'+eff+'%</td>'
+    +'</tr>';
+  }).join('');
+
+  var content='<div class="card" style="margin-top:14px">'
+  // Header
+  +'<div class="card-hd" style="background:var(--navy)">'
+  +'<h3 style="color:#fff">👷 Labour Efficiency Report — '+monthNames[selMonth]+' '+selYear+'</h3>'
+  +'<div class="card-hd-r">'
+  +'<select id="rptBU" onchange="refreshLabourReport()" style="font-size:12px;padding:5px 9px;border:1px solid rgba(255,255,255,.2);border-radius:var(--r);background:rgba(255,255,255,.1);color:#fff"><option value="">All BUs</option>'+BUS.map(function(b){return '<option value="'+b+'"'+(selBU===b?' selected':'')+'>'+b+'</option>';}).join('')+'</select>'
+  +'<select id="rptMonth" onchange="refreshLabourReport()" style="font-size:12px;padding:5px 9px;border:1px solid rgba(255,255,255,.2);border-radius:var(--r);background:rgba(255,255,255,.1);color:#fff">'+monthNames.map(function(m,i){return '<option value="'+i+'"'+(i===selMonth?' selected':'')+'>'+m+'</option>';}).join('')+'</select>'
+  +'<select id="rptYear" onchange="refreshLabourReport()" style="font-size:12px;padding:5px 9px;border:1px solid rgba(255,255,255,.2);border-radius:var(--r);background:rgba(255,255,255,.1);color:#fff">'
+  +[2024,2025,2026,2027].map(function(y){return '<option value="'+y+'"'+(y===selYear?' selected':'')+'>'+y+'</option>';}).join('')
+  +'</select>'
+  +'</div></div>'
+  // KPI tiles
+  +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px;background:#f8fafc;border-bottom:1px solid var(--border)">'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Working days</div><div style="font-size:22px;font-weight:700;font-family:monospace">'+workDays+'</div><div style="font-size:10px;color:#718096">Mon–Sat @ 8hrs</div></div>'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Employees tracked</div><div style="font-size:22px;font-weight:700;font-family:monospace">'+emps.length+'</div><div style="font-size:10px;color:#718096">From WI entries</div></div>'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Total productive hrs</div><div style="font-size:22px;font-weight:700;font-family:monospace;color:#276749">'+totalProd+'</div><div style="font-size:10px;color:#718096">of '+totalAvail+' available</div></div>'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Overall efficiency</div><div style="font-size:22px;font-weight:700;font-family:monospace;color:'+effColor(overallEff)+'">'+overallEff+'%</div><div style="font-size:10px;color:#718096;margin-top:3px">'+effBar(overallEff)+'</div></div>'
+  +'</div>'
+  // Standing time alert
+  +(totalStand>0?'<div style="background:#fff5f5;border-bottom:1px solid #fed7d7;padding:10px 14px;font-size:12px;color:#c53030;font-weight:500">⚠ '+totalStand+' standing time hours recorded this month — review reasons with HODs</div>':'')
+  // Table
+  +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+  +'<thead><tr style="background:#fafbfc">'
+  +'<th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Employee</th>'
+  +'<th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">BU</th>'
+  +'<th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Available Hrs</th>'
+  +'<th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;color:#276749;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Productive Hrs</th>'
+  +'<th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;color:#c53030;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Standing Hrs</th>'
+  +'<th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Unaccounted Hrs</th>'
+  +'<th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Efficiency %</th>'
+  +'</tr></thead>'
+  +'<tbody>'+empRows+'</tbody>'
+  +(emps.length>0?'<tfoot>'+buRows+'<tr style="background:var(--navy)"><td style="padding:10px 12px;font-weight:700;color:#fff" colspan="2">GRAND TOTAL</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fff">'+totalAvail+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#a8f0c6">'+totalProd+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fca5a5">'+totalStand+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fde68a">'+Math.max(0,totalAvail-totalProd-totalStand)+'</td><td style="padding:10px 12px;font-weight:700;color:'+(overallEff>=80?'#a8f0c6':overallEff>=60?'#fde68a':'#fca5a5')+'">'+overallEff+'%</td></tr></tfoot>':'')
+  +'</table></div>'
+  +(emps.length===0?'<div class="empty">No WI labour data found for '+monthNames[selMonth]+' '+selYear+(selBU?' — '+selBU:'')+'</div>':'')
+  +'</div>';
+
+  var rc=document.getElementById('reportContent');
+  if(rc)rc.innerHTML=content;
+}
+
+function refreshLabourReport(){
+  rLabourReport();
+}
+
 document.addEventListener('click',function(e){
   var tid=e.target.id;
   if(tid==='addLeadBtn'){oLead(null);return;}
@@ -2233,11 +2075,9 @@ document.addEventListener('click',function(e){
   if(tid==='refreshBtn'){loadAll().then(function(){go('dash');});return;}
   if(tid==='apiKeyBtn'){oAPIKey();return;}
   if(tid==='addLRBtn'){oLR(null);return;}
+  if(tid==='rptLabourBtn'){rLabourReport();return;}
   if(tid==='addWIBtn'){oWI(null);return;}
   if(tid==='addLRBtn'){oLR(null);return;}
-  if(tid==='addJCBtn'){oJCFull(null);return;}
-  if(tid==='expJCBtn'){expJC();return;}
-  if(tid==='addPlanBtn'){oPlanNew();return;}
   var el=e.target.closest('[data-action]');
   if(!el)return;
   var action=el.getAttribute('data-action');
@@ -2257,11 +2097,6 @@ document.addEventListener('click',function(e){
   }
   if(action==='delSPO')cfm('Delete PO','Permanently delete?',function(){dbDel('supplier_pos','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('buyer');toast('Deleted','s');});});
 
-  if(action==='editJC')oJCFull(id);
-  if(action==='delJC')cfm('Delete job card','Permanently delete this job card and its plan?',function(){dbDel('job_cards','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('jc');toast('Deleted','s');});});
-  if(action==='planJC')oJCPlan(id);
-  if(action==='editPlan')oPlanEdit(id);
-  if(action==='delPlan')cfm('Delete plan','Permanently delete this job plan?',function(){dbDel('job_plans','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('planner');toast('Deleted','s');});});
   if(action==='editInv')oInv(id);
   if(action==='editLR')oLR(id);
   if(action==='delLR')cfm('Delete employee','Remove this employee?',function(){dbDel('labour_rates','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('lrates');toast('Deleted','s');});});
@@ -2307,12 +2142,6 @@ window.onload=function(){
   var s=null;try{s=sessionStorage.getItem('mm');}catch(e){}
   if(s){try{cUser=JSON.parse(s);launch();}catch(e){}}
 };
-
-if('serviceWorker' in navigator){
-  window.addEventListener('load',function(){
-    navigator.serviceWorker.register('/MM-Platform/sw.js').catch(function(e){console.warn('SW registration failed',e);});
-  });
-}
 </script>
 </body>
 </html>
