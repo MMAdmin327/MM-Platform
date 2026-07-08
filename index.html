@@ -2419,7 +2419,7 @@ document.addEventListener('click',function(e){
   if(tid==='refreshBtn'){loadAll().then(function(){go('dash');});return;}
   if(tid==='apiKeyBtn'){oAPIKey();return;}
   if(tid==='addLRBtn'){oLR(null);return;}
-  if(tid==='rptLabourBtn'){rLabourReport();return;}
+  if(tid==='rptLabourBtn'||e.target.closest('#rptLabourBtn')){rLabourReport();return;}
   if(tid==='addWIBtn'){oWI(null);return;}
   if(tid==='addLRBtn'){oLR(null);return;}
   if(tid==='addJCBtn'){oJCFull(null);return;}
