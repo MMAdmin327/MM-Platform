@@ -1444,7 +1444,8 @@ function oWI(editId){
   +'<div class="mfr"><label>Item received / description</label><input id="wiItem" value="'+(w?w.item_desc||'':'')+'" placeholder="e.g. 30kW motor for strip &amp; assess"></div>'
   +'<div style="font-size:11px;color:#92400e">Hours captured here will be linked to an MM Number later once the order is received. Edit this WI and select the MM Number when it comes through.</div>'
   +'</div>'
-  +'<div class="f2"><div class="mfr"><label>WI Number (auto)</label><input id="wiRef" value="'+initRef+'"></div><div class="mfr"><label>Business unit</label><input id="wiBU" value="'+initBU+'" readonly style="background:#f4f6f9"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>WI Number (auto)</label><input id="wiRef" value="'+initRef+'"></div><div class="mfr"><label>Business unit — doing the work</label>'+buS('wiBU',initBU)+'</div></div>'
+  +'<div id="wiBUNote" style="display:none;background:#ebf4ff;border:1px solid #bee3f8;border-radius:6px;padding:8px 11px;font-size:11px;color:#1e3a5f;margin-bottom:11px"></div>'
   +'<div class="f2"><div class="mfr"><label>Description / Task</label><input id="wiDesc" value="'+(w?w.description||'':'')+'"></div><div class="mfr"><label>Trade / Skill</label><input id="wiTrade" value="'+(w?w.trade||'':'')+'"></div></div>'
   +'<div class="f2"><div class="mfr"><label>Foreman / Issued by</label><input id="wiForeman" value="'+(w?w.foreman||'':'')+'"></div><div class="mfr"><label>Priority</label><select id="wiPri"><option'+((!w||w.priority==="Normal")?" selected":"")+'>Normal</option><option'+(w&&w.priority==="High"?" selected":"")+'>High</option><option'+(w&&w.priority==="Low"?" selected":"")+'>Low</option></select></div></div>'
   +'<div class="f2"><div class="mfr"><label>Start date</label><input type="date" id="wiStart" value="'+(w?w.start_date||td():td())+'"></div><div class="mfr"><label>Target completion</label><input type="date" id="wiTarget" value="'+(w?w.target_date||'':'')+'"></div></div>'
@@ -1511,9 +1512,10 @@ function oWI(editId){
     if(editId&&w&&w.job_ref==='NO_ORDER'){
       var nb=document.getElementById('wiNoOrderBox');
       if(nb)nb.style.display='block';
-      var bEl=document.getElementById('wiBU');
-      if(bEl){bEl.readOnly=false;bEl.style.background='#fff';}
     }
+    var wiBUEl=document.getElementById('wiBU');
+    if(wiBUEl)wiBUEl.addEventListener('change',checkWIBUMatch);
+    setTimeout(checkWIBUMatch,60);
 
     document.getElementById('cancelWI').addEventListener('click',closeM);
     document.getElementById('saveWI').addEventListener('click',function(){
@@ -1559,7 +1561,7 @@ function oWI(editId){
         }
       }
       var data={
-        wi_ref:gv('wiRef'),job_ref:jobRef,bu:ord?ord.bu:gv('wiBU'),
+        wi_ref:gv('wiRef'),job_ref:jobRef,bu:gv('wiBU'),
         waybill:isNoOrder?gv('wiWaybill'):'',client:isNoOrder?gv('wiClient'):(ord?ord.client:''),item_desc:isNoOrder?gv('wiItem'):'',
         description:gv('wiDesc'),trade:gv('wiTrade'),foreman:gv('wiForeman'),
         priority:gv('wiPri'),start_date:fmtD(gv('wiStart')),
@@ -1582,18 +1584,33 @@ function onWIOrderChange(){
   var refEl=document.getElementById('wiRef');
   if(jobRef==='NO_ORDER'){
     if(box)box.style.display='block';
-    if(buEl){buEl.readOnly=false;buEl.style.background='#fff';buEl.placeholder='Enter BU';}
     var noOrderWIs=wis.filter(function(x){return x.job_ref==='NO_ORDER';});
     if(refEl)refEl.value='NOPO/'+String(noOrderWIs.length+1).padStart(3,'0');
+    checkWIBUMatch();
     return;
   }
   if(box)box.style.display='none';
-  if(buEl){buEl.readOnly=true;buEl.style.background='#f4f6f9';}
   var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===jobRef){ord=orders[i];break;}}
   if(ord){
     if(buEl)buEl.value=ord.bu;
     var existing=wis.filter(function(x){return x.job_ref===jobRef;});
     if(refEl)refEl.value=jobRef+'/'+String(existing.length+1).padStart(2,'0');
+  }
+  checkWIBUMatch();
+}
+
+function checkWIBUMatch(){
+  var jobRef=gv('wiJob');
+  var selBU=gv('wiBU');
+  var note=document.getElementById('wiBUNote');
+  if(!note)return;
+  if(!jobRef||jobRef==='NO_ORDER'){note.style.display='none';return;}
+  var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===jobRef){ord=orders[i];break;}}
+  if(ord&&selBU&&selBU!==ord.bu){
+    note.style.display='block';
+    note.innerHTML='&#8505; Order <strong>'+jobRef+'</strong> sits under <strong>'+ord.bu+'</strong>, but this WI is assigned to <strong>'+selBU+'</strong>. Labour hours will be costed to '+selBU+' in the Labour Report.';
+  }else{
+    note.style.display='none';
   }
 }
 
