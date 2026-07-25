@@ -371,7 +371,6 @@ function rDash(){
   var quotedLeads=leads.filter(function(l){return l.status==='Quoted';}).length;
   var activeLeadPool=outstandingLeads+quotedLeads;
   var notQuotedPct=activeLeadPool>0?Math.round(outstandingLeads/activeLeadPool*100):0;
-  var outstandingValue=leads.filter(function(l){return l.status==='Lead';}).reduce(function(s,l){return s+(+l.quote_val||0);},0);
   var openOrds=orders.filter(function(o){return !o.invoiced&&o.status!=='Completed';});
   var openV=openOrds.reduce(function(s,o){return s+(+o.order_val||0);},0);
   var lateO=openOrds.filter(function(o){return o.due<td();}).length;
