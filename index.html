@@ -76,6 +76,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .btn-g{background:none;border:none;padding:3px 6px;color:var(--muted);cursor:pointer;border-radius:4px;font-size:14px}.btn-g:hover{background:var(--bg);color:var(--text)}
 .btn-d{background:none;border:none;padding:3px 6px;color:#fc8181;cursor:pointer;border-radius:4px;font-size:14px}.btn-d:hover{background:var(--red-bg);color:var(--red)}
 .tw{overflow-x:auto;overflow-y:auto;max-height:520px}
+.tw-compact table{min-width:auto;width:100%}
+.tw-compact th{padding:8px 7px;font-size:10px}
+.tw-compact td{padding:7px 7px;font-size:11px}
+.tw-compact .badge{padding:1px 5px;font-size:9px}
 .sticky-col{position:sticky;right:0;background:#fff;box-shadow:-2px 0 4px rgba(0,0,0,.06)}
 tr:hover .sticky-col{background:#f8fafc}
 table{width:100%;border-collapse:collapse;font-size:12px;table-layout:auto}
@@ -1334,7 +1338,7 @@ function rWI(){
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Total WIs</div><div class="kpi-v">'+myWIs.length+'</div></div><div class="kpi ca"><div class="kpi-l">In progress</div><div class="kpi-v">'+myWIs.filter(function(w){return w.status==="In progress";}).length+'</div></div><div class="kpi cg"><div class="kpi-l">Completed</div><div class="kpi-v">'+myWIs.filter(function(w){return w.status==="Completed";}).length+'</div></div><div class="kpi '+(noOrderCount>0?'ca':'cg')+'"><div class="kpi-l">Awaiting order</div><div class="kpi-v">'+noOrderCount+'</div><div class="kpi-s">Not yet linked to MM</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Work instruction register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addWIBtn">+ New WI</button></div></div>'
   +'<div class="toolbar"><input type="text" id="wis" placeholder="Search WI number, MM number, description..."><select id="wibu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="wist"><option value="">All statuses</option><option>Open</option><option>In progress</option><option>Completed</option></select></div>'
-  +'<div class="tw"><table><thead><tr><th>WI Number</th><th>MM Number</th><th>BU</th><th>Description</th><th>Foreman</th><th>Trade</th><th>Start Date</th><th>Target</th><th>Est Hrs</th><th>Act Hrs</th><th>Stand Hrs</th><th>Status</th><th>Actions</th></tr></thead><tbody id="witb">'
+  +'<div class="tw tw-compact"><table><thead><tr><th style="width:88px">WI #</th><th style="width:76px">MM #</th><th style="width:82px">BU</th><th>Description</th><th style="width:80px">Foreman</th><th style="width:70px">Trade</th><th style="width:64px">Start</th><th style="width:64px">Target</th><th style="width:38px;text-align:center">Est</th><th style="width:38px;text-align:center">Act</th><th style="width:44px;text-align:center">Stand</th><th style="width:74px">Status</th><th style="width:74px">Actions</th></tr></thead><tbody id="witb">'
   +rWIRows()+'</tbody></table></div></div>';
 }
 
@@ -1356,7 +1360,22 @@ function rWIRows(){
     var jobCell=w.job_ref==='NO_ORDER'
       ? '<span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700">No order</span>'+(w.waybill?'<div style="font-size:10px;color:#718096;margin-top:2px">'+w.waybill+'</div>':'')
       : w.job_ref;
-    return '<tr><td class="mono" style="font-weight:600">'+w.wi_ref+'</td><td class="mono">'+jobCell+'</td><td><span class="badge b-bu">'+w.bu+'</span></td><td style="font-size:11px">'+w.description+'</td><td style="font-size:11px">'+w.foreman+'</td><td style="font-size:11px">'+w.trade+'</td><td class="mono" style="font-size:11px">'+fd(w.start_date)+'</td><td class="mono" style="font-size:11px">'+fd(w.target_date)+'</td><td class="mono">'+w.est_hrs+'</td><td class="mono '+(actHrs>w.est_hrs?'ob':'')+'">'+actHrs+'</td><td class="mono '+(stHrs>0?'sla-warn':'')+'">'+stHrs+'</td><td>'+obadge(w.status)+'</td><td style="white-space:nowrap"><button class="btn-g" data-id="'+w.id+'" data-action="editWI">&#9998;</button> <button class="btn-d" data-id="'+w.id+'" data-action="delWI">&#10005;</button> <button class="btn-g" data-id="'+w.id+'" data-action="printWI" title="Print WI">&#128438;</button></td></tr>';
+    var shortD=function(d){if(!d)return '\u2014';var p=String(d).split('-');return p.length===3?p[2]+'/'+p[1]:fd(d);};
+    return '<tr>'
+    +'<td class="mono" style="font-weight:600">'+w.wi_ref+'</td>'
+    +'<td class="mono">'+jobCell+'</td>'
+    +'<td><span class="badge b-bu">'+w.bu+'</span></td>'
+    +'<td title="'+(w.description||'')+'" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(w.description||'\u2014')+'</td>'
+    +'<td title="'+(w.foreman||'')+'" style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(w.foreman||'\u2014')+'</td>'
+    +'<td title="'+(w.trade||'')+'" style="max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(w.trade||'\u2014')+'</td>'
+    +'<td class="mono">'+shortD(w.start_date)+'</td>'
+    +'<td class="mono">'+shortD(w.target_date)+'</td>'
+    +'<td class="mono" style="text-align:center">'+w.est_hrs+'</td>'
+    +'<td class="mono '+(actHrs>w.est_hrs?'ob':'')+'" style="text-align:center">'+actHrs+'</td>'
+    +'<td class="mono '+(stHrs>0?'sla-warn':'')+'" style="text-align:center">'+stHrs+'</td>'
+    +'<td>'+obadge(w.status)+'</td>'
+    +'<td style="white-space:nowrap"><button class="btn-g" style="padding:2px 3px" data-id="'+w.id+'" data-action="editWI">&#9998;</button><button class="btn-g" style="padding:2px 3px" data-id="'+w.id+'" data-action="printWI" title="Print WI">&#128438;</button><button class="btn-d" style="padding:2px 3px" data-id="'+w.id+'" data-action="delWI">&#10005;</button></td>'
+    +'</tr>';
   }).join('');
 }
 
