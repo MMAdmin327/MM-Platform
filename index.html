@@ -417,7 +417,6 @@ function rDash(){
   +'</div>'
   +'<div class="kpi-s" style="margin-top:6px;border-top:1px solid var(--border);padding-top:5px">'+notQuotedPct+'% not quoted yet</div>'
   +'</div>'
-  +'<div class="kpi '+(outstandingLeads>0?'ca':'cg')+'"><div class="kpi-l">Awaiting quote</div><div class="kpi-v">'+R(outstandingValue)+'</div><div class="kpi-s">'+outstandingLeads+' lead'+(outstandingLeads!==1?'s':'')+' in the queue</div></div>'
   +'<div class="kpi '+(convPct>=50?'cg':convPct>=25?'ca':'cr')+'"><div class="kpi-l">Quote conversion</div><div class="kpi-v">'+convPct+'%</div><div class="kpi-s">'+won+' won of '+totalLeads+' quotes</div></div>'
   +'<div class="kpi cb"><div class="kpi-l">Open order book</div><div class="kpi-v">'+R(openV)+'</div><div class="kpi-s">'+openOrds.length+' active jobs</div></div>'
   +'<div class="kpi '+(lateO>0?'cr':'cg')+'"><div class="kpi-l">Overdue orders</div><div class="kpi-v">'+lateO+'</div><div class="kpi-s">Past due date</div></div>'
