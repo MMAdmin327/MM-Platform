@@ -2,7 +2,7 @@ var SB='https://egcmleyqbtjdwuspgbsi.supabase.co';
 var KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVnY21sZXlxYnRqZHd1c3BnYnNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwOTQ3MDgsImV4cCI6MjA5NDY3MDcwOH0.Bc43J1OzmTKaVNCdKT1bXvIfak1jcxmCqVuyJKZINfw';
 var RHDRS={'apikey':KEY,'Authorization':'Bearer '+KEY};
 var WHDRS={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'};
-var BUS=['Fabrication','Construction','Pumps','TMM','Motors','Wear Protection','Mining Supplies','Laser Cutting'];
+var BUS=['Fabrication','Construction','Pumps','TMM','Motors','Wear Protection','Mining Supplies','Laser Cutting','Draughting'];
 var USERS=[
   {u:'martin',p:'MM@Admin2026',name:'Martin Spies',role:'CEO'},
   {u:'estimator',p:'MM@Est2026',name:'Estimator',role:'Estimator'},
@@ -16,7 +16,8 @@ var USERS=[
   {u:'wearhod',p:'MM@Wear2026',name:'Wear HOD',role:'HOD',bu:'Wear Protection'},
   {u:'planner',p:'MM@Plan2026',name:'Planner',role:'Planner'}
 ];
-var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],msettings=[],cUser=null;
+var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],msettings=[],planr=[],drws=[],cUser=null;
+var plView='week';
 
 function dbGet(t,q){
   var url=SB+'/rest/v1/'+t+'?order=created_at.desc'+(q?'&'+q:'');
@@ -40,8 +41,8 @@ function dbDel(t,q){
 
 function loadAll(){
   sync(true,'Loading...');
-  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];}),dbGet('work_instructions').catch(function(){return[];}),dbGet('month_settings').catch(function(){return[];})]).then(function(res){
-    leads=res[0];orders=res[1];spos=res[2];jcs=[];invs=res[3];lrates=res[4]||[];wis=res[5]||[];msettings=res[6]||[];
+  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];}),dbGet('work_instructions').catch(function(){return[];}),dbGet('month_settings').catch(function(){return[];}),dbGet('planner_items').catch(function(){return[];}),dbGet('drawings').catch(function(){return[];})]).then(function(res){
+    leads=res[0];orders=res[1];spos=res[2];jcs=[];invs=res[3];lrates=res[4]||[];wis=res[5]||[];msettings=res[6]||[];planr=(res[7]||[]).sort(function(a,b){return (+a.seq||0)-(+b.seq||0);});drws=res[8]||[];
     sync(false,'Live');
   }).catch(function(e){sync(false,'Error',true);toast('Load error: '+e.message,'e');});
 }
@@ -151,9 +152,10 @@ function xlx(data,cols,file,sheet){
 }
 
 function go(tab){
-  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,fin:rFin,wi:rWI,jcosting:rJobCosting,lrates:rLRates,reports:rReports};
+  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,fin:rFin,wi:rWI,jcosting:rJobCosting,lrates:rLRates,reports:rReports,planner:rPlanner,drawings:rDrawings};
   var body=document.getElementById('body');
   body.innerHTML=renders[tab]?renders[tab]():'';
+  if(tab==='planner')setTimeout(renderPlanner,0);
   if(tab==='leads')setTimeout(fLeads,0);
   if(tab==='orders')setTimeout(fOrders,0);
 }
@@ -201,6 +203,8 @@ function rDash(){
   var mg=invT>0?Math.round(prof/invT*100):0;
 
   // High risk jobs — mat% or lab% >= 85
+  var drwBlocked=openOrds.filter(function(o){return jobDrwStatus(o.ref).state==='pending';});
+  var drwBlockedVal=drwBlocked.reduce(function(s,o){return s+(+o.order_val||0);},0);
   var noBudgetCount=openOrds.filter(function(o){return (!o.mat_budget||+o.mat_budget===0)&&(!o.lab_budget||+o.lab_budget===0)&&+o.order_val>0;}).length;
   var highRisk=openOrds.filter(function(o){
     var cp=getJobCostPct(o.ref,+o.order_val||1);
@@ -241,6 +245,7 @@ function rDash(){
   +'<div class="kpi cb"><div class="kpi-l">Open order book</div><div class="kpi-v">'+R(openV)+'</div><div class="kpi-s">'+openOrds.length+' active jobs</div></div>'
   +'<div class="kpi '+(lateO>0?'cr':'cg')+'"><div class="kpi-l">Overdue orders</div><div class="kpi-v">'+lateO+'</div><div class="kpi-s">Past due date</div></div>'
   
+  +'<div class="kpi '+(drwBlocked.length>0?'cr':'cg')+'"><div class="kpi-l">Blocked on drawings</div><div class="kpi-v">'+drwBlocked.length+'</div><div class="kpi-s">'+R(drwBlockedVal)+' held up</div></div>'
   +'<div class="kpi '+(noBudgetCount>0?'ca':'cg')+'"><div class="kpi-l">No budget set</div><div class="kpi-v">'+noBudgetCount+'</div><div class="kpi-s">Jobs need budget</div></div>'
   +'<div class="kpi '+(highRisk.length>0?'cr':'cg')+'"><div class="kpi-l">High risk jobs</div><div class="kpi-v">'+highRisk.length+'</div><div class="kpi-s">85%+ budget used</div></div>'
   +'<div class="kpi '+(overspent.length>0?'cr':'cg')+'"><div class="kpi-l">Overspent jobs</div><div class="kpi-v">'+overspent.length+'</div><div class="kpi-s">100%+ budget used</div></div>'
@@ -299,7 +304,7 @@ function rOrders(){
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Open orders</div><div class="kpi-v">'+open.length+'</div></div><div class="kpi cgo"><div class="kpi-l">Order book value</div><div class="kpi-v">'+R(openV)+'</div></div><div class="kpi '+(late>0?'cr':'cg')+'"><div class="kpi-l">Overdue</div><div class="kpi-v">'+late+'</div><div class="kpi-s">Past due date</div></div><div class="kpi cg"><div class="kpi-l">Completed</div><div class="kpi-v">'+orders.filter(function(o){return o.status==='Completed';}).length+'</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Order book register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addOrderBtn">+ Add order</button><button class="btn btn-sm" id="addSubJobBtn" style="background:#f0fff4;color:#276749;border-color:#c6f6d5">+ Add sub-job</button><button class="btn btn-e" id="expOrdersBtn">&#8595; Excel</button></div></div>'
   +'<div class="toolbar"><input type="text" id="os" placeholder="Search..."><select id="obu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="ost"><option value="">All statuses</option><option>Open</option><option>In progress</option><option>Completed</option></select></div>'
-  +'<div class="tw"><table><thead><tr><th>Job #</th><th>Client</th><th>Client PO #</th><th>BU</th><th>Value</th><th>Due</th><th>SLA</th><th style="text-align:center">Mat %</th><th style="text-align:center">Lab %</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead><tbody id="otb"><tr><td colspan="12" class="empty">Loading...</td></tr></tbody></table></div></div>';
+  +'<div class="tw"><table><thead><tr><th>Job #</th><th>Client</th><th>Client PO #</th><th>BU</th><th>Value</th><th>Due</th><th>SLA</th><th style="text-align:center">Drawings</th><th style="text-align:center">Mat %</th><th style="text-align:center">Lab %</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead><tbody id="otb"><tr><td colspan="13" class="empty">Loading...</td></tr></tbody></table></div></div>';
 }
 
 function orderRow(o,isSubJob){
@@ -311,7 +316,7 @@ function orderRow(o,isSubJob){
   function pBadge(p){if(noBudget)return noBadge;if(p<0)return '<span style="color:#a0aec0;font-size:11px">—</span>';return p>=100?'<span style="color:#c53030;font-weight:700;font-size:11px">'+p+'%</span>':p>=85?'<span style="color:#d97706;font-weight:700;font-size:11px">'+p+'%</span>':'<span style="color:#276749;font-size:11px">'+p+'%</span>';}
   var subStyle=isSubJob?'background:#f8fafc;':'';
   var refDisplay=isSubJob?'<span style="color:#a0aec0;margin-right:3px">&#8627;</span><button class="btn-g" style="font-family:monospace;font-size:11px;font-weight:600;color:#4a6741;padding:2px 4px" data-id="'+o.id+'" data-action="showJobCost">'+o.ref+'</button>':'<button class="btn-g" style="font-family:monospace;font-size:11px;font-weight:600;color:var(--navy);padding:2px 4px" data-id="'+o.id+'" data-action="showJobCost">'+o.ref+'</button>';
-  return '<tr style="'+subStyle+'"><td class="mono">'+refDisplay+'</td><td>'+(isSubJob?'<span style="color:#718096;font-size:11px">'+o.client+'</span>':o.client)+'</td><td class="mono" style="font-size:11px">'+(o.client_po||'—')+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+pBadge(cp.matPct)+'</td><td style="text-align:center">'+pBadge(cp.labPct)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(o.notes||'—')+'</td><td style="white-space:nowrap">'+finBtn+'<button class="btn-g" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
+  return '<tr style="'+subStyle+'"><td class="mono">'+refDisplay+'</td><td>'+(isSubJob?'<span style="color:#718096;font-size:11px">'+o.client+'</span>':o.client)+'</td><td class="mono" style="font-size:11px">'+(o.client_po||'—')+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+jobDrwPill(o.ref)+'</td><td style="text-align:center">'+pBadge(cp.matPct)+'</td><td style="text-align:center">'+pBadge(cp.labPct)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(o.notes||'—')+'</td><td style="white-space:nowrap">'+finBtn+'<button class="btn-g" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
 }
 
 function fOrders(){
@@ -326,7 +331,7 @@ function fOrders(){
     return true;
   });
   var tb=document.getElementById('otb');if(!tb)return;
-  if(!f.length){tb.innerHTML='<tr><td colspan="12" class="empty">No records match</td></tr>';return;}
+  if(!f.length){tb.innerHTML='<tr><td colspan="13" class="empty">No records match</td></tr>';return;}
   // Separate masters and sub-jobs
   var masters=f.filter(function(o){return !o.master_ref;});
   var subJobs=f.filter(function(o){return !!o.master_ref;});
@@ -342,7 +347,7 @@ function fOrders(){
     var masterInList=masters.some(function(m){return m.ref===sub.master_ref;});
     if(!masterInList)rows+=orderRow(sub,true);
   });
-  tb.innerHTML=rows||'<tr><td colspan="12" class="empty">No records match</td></tr>';
+  tb.innerHTML=rows||'<tr><td colspan="13" class="empty">No records match</td></tr>';
 }
 
 function rBuyer(){
@@ -2079,6 +2084,473 @@ function oSetHours(){
   });
 }
 
+// ── PLANNER ──────────────────────────────────────────────────────────────────
+var BU_COLOURS={'Fabrication':'#2E5FA3','Construction':'#C87A2E','Pumps':'#276749','TMM':'#9B2C2C','Motors':'#6B46C1','Wear Protection':'#B7791F','Mining Supplies':'#2C7A7B','Laser Cutting':'#4A5568','Draughting':'#805AD5'};
+function buColour(bu){return BU_COLOURS[bu]||'#718096';}
+
+function pDate(s){if(!s)return null;var p=String(s).split('-');if(p.length!==3)return null;return new Date(+p[0],+p[1]-1,+p[2]);}
+function pISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function pAdd(d,n){var x=new Date(d.getTime());x.setDate(x.getDate()+n);return x;}
+function pDiff(a,b){return Math.round((b-a)/86400000);}
+function pMonday(d){var x=new Date(d.getTime());var g=x.getDay();var diff=g===0?-6:1-g;x.setDate(x.getDate()+diff);return x;}
+
+function plannerOrder(ref){for(var i=0;i<orders.length;i++){if(orders[i].ref===ref)return orders[i];}return null;}
+
+function plannerAutoPct(ref){
+  var jobWIs=wis.filter(function(w){return w.job_ref===ref;});
+  if(!jobWIs.length)return 0;
+  var est=0,act=0;
+  jobWIs.forEach(function(w){
+    est+=(+w.est_hrs||0);
+    var ld=w.labour_data?JSON.parse(w.labour_data):[];
+    ld.forEach(function(e){act+=(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);});
+  });
+  if(est<=0)return 0;
+  return Math.min(100,Math.round(act/est*100));
+}
+
+function plannerPct(it){
+  var ov=+it.progress_override;
+  if(!isNaN(ov)&&ov>=0)return Math.min(100,ov);
+  return plannerAutoPct(it.job_ref);
+}
+
+function rPlanner(){
+  return '<div class="card"><div class="card-hd"><h3>Planner &mdash; job schedule</h3><div class="card-hd-r">'
+  +'<button class="btn btn-sm" id="plWeekBtn" style="'+(plView==='week'?'background:var(--navy);color:#fff;border-color:var(--navy)':'')+'">Week view</button>'
+  +'<button class="btn btn-sm" id="plMonthBtn" style="'+(plView==='month'?'background:var(--navy);color:#fff;border-color:var(--navy)':'')+'">Month view</button>'
+  +'<button class="btn btn-p btn-sm" id="plAddBtn">+ Add job to planner</button>'
+  +'</div></div>'
+  +'<div id="plBody"></div></div>';
+}
+
+function renderPlanner(){
+  var host=document.getElementById('plBody');
+  if(!host)return;
+  var items=planr.slice();
+  if(cUser&&cUser.role==='HOD'){
+    items=items.filter(function(it){var o=plannerOrder(it.job_ref);return o&&(o.bu===cUser.bu||(cUser.bu2&&o.bu===cUser.bu2));});
+  }
+  if(!items.length){host.innerHTML='<div class="empty">No jobs on the planner yet &mdash; click <strong>+ Add job to planner</strong> to start scheduling.</div>';return;}
+
+  var today=new Date();today.setHours(0,0,0,0);
+
+  // Determine date range
+  var minD=null,maxD=null;
+  items.forEach(function(it){
+    var s=pDate(it.start_date),f=pDate(it.finish_date);
+    if(s&&(!minD||s<minD))minD=s;
+    if(f&&(!maxD||f>maxD))maxD=f;
+    if(s&&(!maxD||s>maxD))maxD=s;
+  });
+  if(!minD)minD=pAdd(today,-3);
+  if(!maxD)maxD=pAdd(today,21);
+  if(today<minD)minD=today;
+  if(today>maxD)maxD=today;
+  minD=pAdd(minD,-2);maxD=pAdd(maxD,4);
+
+  var ROW=36,LEFTW=560;
+  var cols=[],colW;
+  if(plView==='week'){
+    colW=30;
+    var c=new Date(minD.getTime());
+    while(c<=maxD){cols.push(new Date(c.getTime()));c=pAdd(c,1);}
+  }else{
+    colW=44;
+    var w=pMonday(minD);
+    while(w<=maxD){cols.push(new Date(w.getTime()));w=pAdd(w,7);}
+  }
+  var totalW=cols.length*colW;
+
+  function colIndexFor(d){
+    if(plView==='week')return pDiff(minD,d);
+    return Math.floor(pDiff(pMonday(minD),d)/7);
+  }
+
+  // ── Timeline header ──
+  var monthBar='',dayBar='';
+  var mGroups=[];
+  cols.forEach(function(d,i){
+    var key=d.getFullYear()+'-'+d.getMonth();
+    if(!mGroups.length||mGroups[mGroups.length-1].key!==key)mGroups.push({key:key,label:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getFullYear(),n:1});
+    else mGroups[mGroups.length-1].n++;
+  });
+  mGroups.forEach(function(g){
+    monthBar+='<div style="width:'+(g.n*colW)+'px;flex-shrink:0;border-right:1px solid var(--border);font-size:10px;font-weight:700;color:var(--navy);padding:3px 6px;white-space:nowrap;overflow:hidden;background:#fafbfc">'+g.label+'</div>';
+  });
+  cols.forEach(function(d){
+    var isWknd=plView==='week'&&(d.getDay()===0);
+    var isToday=plView==='week'&&d.getTime()===today.getTime();
+    var lbl=plView==='week'?d.getDate():d.getDate()+'/'+(d.getMonth()+1);
+    dayBar+='<div style="width:'+colW+'px;flex-shrink:0;border-right:1px solid #eef1f5;text-align:center;font-size:9px;padding:4px 0;'
+    +(isToday?'background:#fffbeb;font-weight:700;color:#92400e;':isWknd?'background:#f7fafc;color:#a0aec0;':'color:#718096;')+'">'+lbl+'</div>';
+  });
+
+  // ── Rows ──
+  var leftRows='',ganttRows='';
+  items.forEach(function(it,idx){
+    var o=plannerOrder(it.job_ref);
+    var bu=o?o.bu:'';
+    var client=o?o.client:(it.job_ref==='NO_ORDER'?'—':'');
+    var col=buColour(bu);
+    var s=pDate(it.start_date),f=pDate(it.finish_date);
+    var days=(s&&f)?pDiff(s,f)+1:0;
+    var pct=plannerPct(it);
+    var late=f&&f<today&&pct<100;
+    var zebra=idx%2?'background:#fbfcfd;':'';
+
+    leftRows+='<div style="display:flex;align-items:center;height:'+ROW+'px;border-bottom:1px solid #f0f2f5;'+zebra+'">'
+    +'<div style="width:52px;flex-shrink:0;text-align:center;display:flex;gap:1px;justify-content:center">'
+    +'<button class="btn-g" style="padding:0 3px;font-size:11px;line-height:1" data-id="'+it.id+'" data-action="plUp" title="Move up">&#9650;</button>'
+    +'<button class="btn-g" style="padding:0 3px;font-size:11px;line-height:1" data-id="'+it.id+'" data-action="plDown" title="Move down">&#9660;</button>'
+    +'</div>'
+    +'<div style="width:86px;flex-shrink:0;font-family:monospace;font-size:11px;font-weight:600;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+it.job_ref+'</div>'
+    +'<div style="width:118px;flex-shrink:0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:6px" title="'+client+'">'+client+'</div>'
+    +'<div style="width:96px;flex-shrink:0"><span style="background:'+col+';color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;white-space:nowrap">'+(bu||'—')+'</span></div>'
+    +'<div style="width:104px;flex-shrink:0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:6px" title="'+(it.assigned_to||'')+'">'+(it.assigned_to||'<span style="color:#cbd5e0">Unassigned</span>')+'</div>'
+    +'<div style="width:40px;flex-shrink:0;text-align:center;font-family:monospace;font-size:11px">'+(days||'—')+'</div>'
+    +'<div style="width:44px;flex-shrink:0;text-align:center;font-family:monospace;font-size:11px;font-weight:700;color:'+(pct>=100?'#276749':pct>=50?'#d97706':'#718096')+'">'+pct+'%</div>'
+    +'<div style="width:52px;flex-shrink:0;text-align:center;white-space:nowrap">'
+    +'<button class="btn-g" style="padding:2px 3px" data-id="'+it.id+'" data-action="plEdit">&#9998;</button>'
+    +'<button class="btn-d" style="padding:2px 3px" data-id="'+it.id+'" data-action="plDel">&#10005;</button>'
+    +'</div></div>';
+
+    var bar='';
+    if(s&&f){
+      var si=colIndexFor(s),ei=colIndexFor(f);
+      var left,width;
+      if(plView==='week'){left=si*colW;width=Math.max(colW,(ei-si+1)*colW);}
+      else{left=si*colW;width=Math.max(colW,(ei-si+1)*colW);}
+      bar='<div style="position:absolute;left:'+left+'px;top:7px;width:'+width+'px;height:22px;background:'+col+'22;border:1.5px solid '+(late?'#c53030':col)+';border-radius:5px;overflow:hidden" title="'+it.job_ref+' — '+days+' days — '+pct+'%">'
+      +'<div style="width:'+pct+'%;height:100%;background:'+col+';opacity:.85"></div>'
+      +'<div style="position:absolute;inset:0;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:700;color:'+(pct>45?'#fff':'#2d3748')+';white-space:nowrap;overflow:hidden">'+(it.assigned_to||it.job_ref)+'</div>'
+      +'</div>';
+    }
+    ganttRows+='<div style="position:relative;height:'+ROW+'px;border-bottom:1px solid #f0f2f5;'+zebra+'">'+bar+'</div>';
+  });
+
+  // Today marker
+  var todayLine='';
+  if(today>=minD&&today<=maxD){
+    var tl=plView==='week'?colIndexFor(today)*colW+colW/2:colIndexFor(today)*colW+(pDiff(pMonday(today),today)/7)*colW;
+    todayLine='<div style="position:absolute;left:'+tl+'px;top:0;bottom:0;width:2px;background:#e53e3e;z-index:3;pointer-events:none"></div>';
+  }
+
+  // ── Capacity strip ──
+  var busInUse=[];
+  items.forEach(function(it){var o=plannerOrder(it.job_ref);if(o&&o.bu&&busInUse.indexOf(o.bu)<0)busInUse.push(o.bu);});
+  var capLeft='',capRight='';
+  busInUse.forEach(function(bu){
+    capLeft+='<div style="display:flex;align-items:center;height:26px;border-bottom:1px solid #f0f2f5;padding-left:10px"><span style="background:'+buColour(bu)+';color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px">'+bu+'</span></div>';
+    var cells='';
+    cols.forEach(function(d){
+      var n=0;
+      items.forEach(function(it){
+        var o=plannerOrder(it.job_ref);
+        if(!o||o.bu!==bu)return;
+        var s=pDate(it.start_date),f=pDate(it.finish_date);
+        if(!s||!f)return;
+        if(plView==='week'){if(d>=s&&d<=f)n++;}
+        else{var we=pAdd(d,6);if(s<=we&&f>=d)n++;}
+      });
+      var bg=n===0?'transparent':n===1?buColour(bu)+'33':n===2?buColour(bu)+'77':buColour(bu);
+      cells+='<div style="width:'+colW+'px;flex-shrink:0;border-right:1px solid #f4f6f9;height:26px;display:flex;align-items:center;justify-content:center;background:'+bg+';font-size:9px;font-weight:700;color:'+(n>2?'#fff':'#4a5568')+'">'+(n||'')+'</div>';
+    });
+    capRight+='<div style="display:flex;height:26px;border-bottom:1px solid #f0f2f5">'+cells+'</div>';
+  });
+
+  host.innerHTML=
+  '<div style="display:flex;align-items:center;gap:14px;padding:9px 14px;background:#fcfcfd;border-bottom:1px solid var(--border);font-size:11px;color:#718096;flex-wrap:wrap">'
+  +'<span><span style="display:inline-block;width:20px;height:8px;background:#2E5FA3;border-radius:2px;vertical-align:middle"></span> Bar fill = % complete</span>'
+  +'<span><span style="display:inline-block;width:2px;height:12px;background:#e53e3e;vertical-align:middle"></span> Today</span>'
+  +'<span><span style="display:inline-block;width:12px;height:10px;border:1.5px solid #c53030;border-radius:2px;vertical-align:middle"></span> Overdue</span>'
+  +'<span style="margin-left:auto">'+items.length+' job'+(items.length!==1?'s':'')+' scheduled</span>'
+  +'</div>'
+  +'<div style="overflow-y:auto;max-height:560px">'
+  +'<div style="display:flex;min-width:100%">'
+  // LEFT
+  +'<div style="width:'+LEFTW+'px;flex-shrink:0;border-right:2px solid var(--border);background:#fff;position:sticky;left:0;z-index:2">'
+  +'<div style="height:22px;background:#fafbfc;border-bottom:1px solid var(--border)"></div>'
+  +'<div style="display:flex;align-items:center;height:'+ROW+'px;background:#fafbfc;border-bottom:2px solid var(--border);font-size:9px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em">'
+  +'<div style="width:52px;flex-shrink:0;text-align:center">Seq</div>'
+  +'<div style="width:86px;flex-shrink:0">Job #</div>'
+  +'<div style="width:118px;flex-shrink:0">Client</div>'
+  +'<div style="width:96px;flex-shrink:0">BU</div>'
+  +'<div style="width:104px;flex-shrink:0">Assigned</div>'
+  +'<div style="width:40px;flex-shrink:0;text-align:center">Days</div>'
+  +'<div style="width:44px;flex-shrink:0;text-align:center">%</div>'
+  +'<div style="width:52px;flex-shrink:0;text-align:center">Edit</div>'
+  +'</div>'
+  +leftRows
+  +(busInUse.length?'<div style="height:28px;display:flex;align-items:center;padding-left:10px;background:#f4f6f9;border-top:2px solid var(--border);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em">BU load</div>'+capLeft:'')
+  +'</div>'
+  // RIGHT
+  +'<div style="flex:1;overflow-x:auto" id="plScroll">'
+  +'<div style="width:'+totalW+'px;position:relative">'
+  +todayLine
+  +'<div style="display:flex;height:22px;border-bottom:1px solid var(--border)">'+monthBar+'</div>'
+  +'<div style="display:flex;height:'+ROW+'px;background:#fafbfc;border-bottom:2px solid var(--border);align-items:center">'+dayBar+'</div>'
+  +ganttRows
+  +(busInUse.length?'<div style="height:28px;background:#f4f6f9;border-top:2px solid var(--border);border-bottom:1px solid var(--border)"></div>'+capRight:'')
+  +'</div></div>'
+  +'</div></div>';
+}
+
+function oPlannerAdd(){
+  var onPlanner=planr.map(function(p){return p.job_ref;});
+  var avail=orders.filter(function(o){return !o.invoiced&&o.status!=='Completed'&&onPlanner.indexOf(o.ref)<0;});
+  if(cUser&&cUser.role==='HOD')avail=avail.filter(function(o){return o.bu===cUser.bu||(cUser.bu2&&o.bu===cUser.bu2);});
+  if(!avail.length){toast('No unscheduled open jobs available','i');return;}
+  var opts=avail.map(function(o){return '<option value="'+o.ref+'">'+o.ref+' — '+o.client+' ('+o.bu+')</option>';}).join('');
+  var empList=lrates.filter(function(r){return r.active;}).map(function(r){return '<option value="'+r.emp_name+'">';}).join('');
+
+  openM('<div class="mtitle">Add job to planner</div>'
+  +'<div class="mfr"><label>Job (MM Number)</label><select id="plJob">'+opts+'</select></div>'
+  +'<div class="mfr"><label>Assign to</label><input id="plAssign" list="plEmpList" placeholder="Name of person responsible"><datalist id="plEmpList">'+empList+'</datalist></div>'
+  +'<div class="f2"><div class="mfr"><label>Start date</label><input type="date" id="plStart" value="'+td()+'" oninput="plCalcDays()"></div><div class="mfr"><label>Finish date</label><input type="date" id="plFinish" oninput="plCalcDays()"></div></div>'
+  +'<div style="background:#f4f6f9;border-radius:6px;padding:9px 12px;font-size:11px;color:#718096;margin-bottom:11px">Duration: <strong id="plDays" style="color:var(--navy)">—</strong></div>'
+  +'<div class="mfr"><label>Notes</label><input id="plNotes" placeholder="Optional"></div>'
+  +'<div class="mfoot"><button class="btn" id="plCancel">Cancel</button><button class="btn btn-p" id="plSave">Add to planner</button></div>');
+
+  document.getElementById('plCancel').addEventListener('click',closeM);
+  document.getElementById('plSave').addEventListener('click',function(){
+    var s=gv('plStart'),f=gv('plFinish');
+    if(!s||!f){toast('Please set both start and finish dates','e');return;}
+    if(pDate(f)<pDate(s)){toast('Finish date cannot be before start date','e');return;}
+    var maxSeq=planr.reduce(function(m,p){return Math.max(m,+p.seq||0);},0);
+    dbPost('planner_items',{job_ref:gv('plJob'),assigned_to:gv('plAssign'),start_date:fmtD(s),finish_date:fmtD(f),progress_override:-1,seq:maxSeq+1,notes:gv('plNotes')})
+    .then(function(){closeM();return loadAll();}).then(function(){go('planner');setTimeout(renderPlanner,60);toast('Added to planner','s');}).catch(function(e){toast(e.message,'e');});
+  });
+}
+
+function plCalcDays(){
+  var s=pDate(gv('plStart')),f=pDate(gv('plFinish'));
+  var el=document.getElementById('plDays');
+  if(!el)return;
+  if(s&&f&&f>=s){var d=pDiff(s,f)+1;el.textContent=d+' day'+(d!==1?'s':'');}
+  else el.textContent='—';
+}
+
+function oPlannerEdit(id){
+  var it=null;for(var i=0;i<planr.length;i++){if(planr[i].id===id){it=planr[i];break;}}
+  if(!it)return;
+  var o=plannerOrder(it.job_ref);
+  var autoP=plannerAutoPct(it.job_ref);
+  var ov=+it.progress_override;
+  var hasOv=!isNaN(ov)&&ov>=0;
+  var empList=lrates.filter(function(r){return r.active;}).map(function(r){return '<option value="'+r.emp_name+'">';}).join('');
+
+  openM('<div class="mtitle">Edit planner entry — '+it.job_ref+'</div>'
+  +'<div style="background:#f4f6f9;border-radius:6px;padding:9px 12px;font-size:11px;color:#718096;margin-bottom:13px">'+(o?o.client+' &nbsp;|&nbsp; '+o.bu+' &nbsp;|&nbsp; '+R(+o.order_val||0):'Order not found')+'</div>'
+  +'<div class="mfr"><label>Assign to</label><input id="plAssign" list="plEmpList2" value="'+(it.assigned_to||'')+'"><datalist id="plEmpList2">'+empList+'</datalist></div>'
+  +'<div class="f2"><div class="mfr"><label>Start date</label><input type="date" id="plStart" value="'+(it.start_date||'')+'" oninput="plCalcDays()"></div><div class="mfr"><label>Finish date</label><input type="date" id="plFinish" value="'+(it.finish_date||'')+'" oninput="plCalcDays()"></div></div>'
+  +'<div style="background:#f4f6f9;border-radius:6px;padding:9px 12px;font-size:11px;color:#718096;margin-bottom:11px">Duration: <strong id="plDays" style="color:var(--navy)">—</strong></div>'
+  +'<div class="mfr"><label>Progress</label><select id="plPMode" onchange="plToggleP()"><option value="auto"'+(hasOv?'':' selected')+'>Auto from WI hours ('+autoP+'%)</option><option value="man"'+(hasOv?' selected':'')+'>Set manually</option></select></div>'
+  +'<div class="mfr" id="plPManBox" style="display:'+(hasOv?'block':'none')+'"><label>Progress %</label><input type="number" id="plPct" value="'+(hasOv?ov:autoP)+'" min="0" max="100"></div>'
+  +'<div class="mfr"><label>Notes</label><input id="plNotes" value="'+(it.notes||'')+'"></div>'
+  +'<div class="mfoot"><button class="btn" id="plCancel">Cancel</button><button class="btn btn-p" id="plSave">Update</button></div>');
+
+  setTimeout(plCalcDays,40);
+  document.getElementById('plCancel').addEventListener('click',closeM);
+  document.getElementById('plSave').addEventListener('click',function(){
+    var s=gv('plStart'),f=gv('plFinish');
+    if(!s||!f){toast('Please set both dates','e');return;}
+    if(pDate(f)<pDate(s)){toast('Finish date cannot be before start date','e');return;}
+    var pov=gv('plPMode')==='man'?(+gv('plPct')||0):-1;
+    dbPatch('planner_items','id=eq.'+id,{assigned_to:gv('plAssign'),start_date:fmtD(s),finish_date:fmtD(f),progress_override:pov,notes:gv('plNotes')})
+    .then(function(){closeM();return loadAll();}).then(function(){go('planner');setTimeout(renderPlanner,60);toast('Planner updated','s');}).catch(function(e){toast(e.message,'e');});
+  });
+}
+
+function plToggleP(){
+  var b=document.getElementById('plPManBox');
+  if(b)b.style.display=gv('plPMode')==='man'?'block':'none';
+}
+
+function plannerMove(id,dir){
+  var idx=-1;
+  for(var i=0;i<planr.length;i++){if(planr[i].id===id){idx=i;break;}}
+  if(idx<0)return;
+  var swap=dir==='up'?idx-1:idx+1;
+  if(swap<0||swap>=planr.length)return;
+  var a=planr[idx],b=planr[swap];
+  var sa=+a.seq||0,sb=+b.seq||0;
+  if(sa===sb){sa=idx;sb=swap;}
+  Promise.all([
+    dbPatch('planner_items','id=eq.'+a.id,{seq:sb}),
+    dbPatch('planner_items','id=eq.'+b.id,{seq:sa})
+  ]).then(function(){return loadAll();}).then(function(){go('planner');setTimeout(renderPlanner,60);}).catch(function(e){toast(e.message,'e');});
+}
+
+// ── DRAWINGS ─────────────────────────────────────────────────────────────────
+var DRW_STATUS=['Not started','In progress','Internal check','Issued to client','Approved','Superseded'];
+var DRW_SB={'Not started':'background:#f7fafc;color:#4a5568;border-color:#e2e8f0','In progress':'background:#ebf4ff;color:#1e3a5f;border-color:#bee3f8','Internal check':'background:#faf5ff;color:#44337a;border-color:#d6bcfa','Issued to client':'background:#fffbeb;color:#92400e;border-color:#fcd34d','Approved':'background:#f0fff4;color:#276749;border-color:#c6f6d5','Superseded':'background:#f7fafc;color:#a0aec0;border-color:#e2e8f0'};
+function drwBadge(s){return '<span class="badge" style="'+(DRW_SB[s]||DRW_SB['Not started'])+'">'+s+'</span>';}
+
+function drwAge(d){if(!d)return 0;var a=pDate(d);if(!a)return 0;var t=new Date();t.setHours(0,0,0,0);return Math.max(0,Math.round((t-a)/86400000));}
+
+// Drawing gate status for a job: none | pending | approved
+function jobDrwStatus(ref){
+  var jd=drws.filter(function(d){return d.job_ref===ref&&d.status!=='Superseded';});
+  if(!jd.length)return {state:'none',total:0,approved:0,oldest:0};
+  var appr=jd.filter(function(d){return d.status==='Approved';}).length;
+  var oldest=0;
+  jd.forEach(function(d){if(d.status==='Issued to client'){var a=drwAge(d.issued_date);if(a>oldest)oldest=a;}});
+  return {state:appr===jd.length?'approved':'pending',total:jd.length,approved:appr,oldest:oldest};
+}
+
+function jobDrwPill(ref){
+  var s=jobDrwStatus(ref);
+  if(s.state==='none')return '<span style="background:#f7fafc;color:#a0aec0;border:1px solid #e2e8f0;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:600;white-space:nowrap">No drawings</span>';
+  if(s.state==='approved')return '<span style="background:#f0fff4;color:#276749;border:1px solid #c6f6d5;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700;white-space:nowrap">&#10003; Approved</span>';
+  var col=s.oldest>=14?'background:#fff5f5;color:#9b1c1c;border-color:#fed7d7':'background:#fffbeb;color:#92400e;border-color:#fcd34d';
+  return '<span style="'+col+';border-width:1px;border-style:solid;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700;white-space:nowrap" title="'+s.approved+' of '+s.total+' approved">'+s.approved+'/'+s.total+' appr'+(s.oldest>=7?' &middot; '+s.oldest+'d':'')+'</span>';
+}
+
+function autoDrwNo(jobRef){
+  if(!jobRef)return '';
+  var ex=drws.filter(function(d){return d.job_ref===jobRef;});
+  return jobRef+'-'+String(ex.length+1).padStart(2,'0');
+}
+
+function rDrawings(){
+  var active=drws.filter(function(d){return d.status!=='Superseded';});
+  var inProg=active.filter(function(d){return d.status==='In progress'||d.status==='Internal check';}).length;
+  var issued=active.filter(function(d){return d.status==='Issued to client';});
+  var appr=active.filter(function(d){return d.status==='Approved';}).length;
+  var overdue=issued.filter(function(d){return drwAge(d.issued_date)>=7;}).length;
+
+  // Blocked jobs: open orders with drawings not all approved
+  var blocked=orders.filter(function(o){
+    if(o.invoiced||o.status==='Completed')return false;
+    return jobDrwStatus(o.ref).state==='pending';
+  });
+  var blockedVal=blocked.reduce(function(s,o){return s+(+o.order_val||0);},0);
+
+  // Workload per draughtsman
+  var byPerson={};
+  active.forEach(function(d){
+    var p=d.draughtsman||'Unassigned';
+    if(!byPerson[p])byPerson[p]={p:p,prog:0,chk:0,iss:0,appr:0,tot:0};
+    byPerson[p].tot++;
+    if(d.status==='In progress')byPerson[p].prog++;
+    else if(d.status==='Internal check')byPerson[p].chk++;
+    else if(d.status==='Issued to client')byPerson[p].iss++;
+    else if(d.status==='Approved')byPerson[p].appr++;
+  });
+  var people=Object.keys(byPerson).map(function(k){return byPerson[k];});
+
+  return '<div class="kpis">'
+  +'<div class="kpi cn"><div class="kpi-l">Active drawings</div><div class="kpi-v">'+active.length+'</div></div>'
+  +'<div class="kpi cb"><div class="kpi-l">On the board</div><div class="kpi-v">'+inProg+'</div><div class="kpi-s">In progress or checking</div></div>'
+  +'<div class="kpi '+(overdue>0?'cr':'ca')+'"><div class="kpi-l">Awaiting client</div><div class="kpi-v">'+issued.length+'</div><div class="kpi-s">'+(overdue>0?overdue+' over 7 days':'All within 7 days')+'</div></div>'
+  +'<div class="kpi cg"><div class="kpi-l">Approved</div><div class="kpi-v">'+appr+'</div></div>'
+  +'<div class="kpi '+(blocked.length>0?'cr':'cg')+'"><div class="kpi-l">Jobs blocked</div><div class="kpi-v">'+blocked.length+'</div><div class="kpi-s">'+R(blockedVal)+' held up</div></div>'
+  +'</div>'
+  // Workload
+  +(people.length?'<div class="card"><div class="card-hd"><h3>Draughtsman workload</h3></div><div class="tw"><table><thead><tr><th>Draughtsman</th><th style="text-align:center">In progress</th><th style="text-align:center">Internal check</th><th style="text-align:center">With client</th><th style="text-align:center">Approved</th><th style="text-align:center">Total</th></tr></thead><tbody>'
+  +people.map(function(p){return '<tr><td style="font-weight:500">'+p.p+'</td><td style="text-align:center;font-family:monospace;color:#1e3a5f;font-weight:600">'+(p.prog||'—')+'</td><td style="text-align:center;font-family:monospace;color:#44337a">'+(p.chk||'—')+'</td><td style="text-align:center;font-family:monospace;color:#92400e">'+(p.iss||'—')+'</td><td style="text-align:center;font-family:monospace;color:#276749">'+(p.appr||'—')+'</td><td style="text-align:center;font-family:monospace;font-weight:700">'+p.tot+'</td></tr>';}).join('')
+  +'</tbody></table></div></div>':'')
+  // Blocked jobs alert
+  +(blocked.length?'<div class="card"><div class="card-hd" style="background:#fff5f5;border-bottom:2px solid #fed7d7"><h3 style="color:#9b1c1c">&#9888; Jobs blocked &mdash; drawings not approved</h3></div><div class="tw"><table><thead><tr><th>Job #</th><th>Client</th><th>BU</th><th>Value</th><th>Due</th><th>Drawings</th></tr></thead><tbody>'
+  +blocked.map(function(o){var s=jobDrwStatus(o.ref);return '<tr><td class="mono" style="font-weight:600">'+o.ref+'</td><td>'+o.client+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono" style="font-size:11px">'+fd(o.due)+'</td><td>'+jobDrwPill(o.ref)+'</td></tr>';}).join('')
+  +'</tbody></table></div></div>':'')
+  // Register
+  +'<div class="card"><div class="card-hd"><h3>Drawing register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addDrwBtn">+ New drawing</button></div></div>'
+  +'<div class="toolbar"><input type="text" id="ds" placeholder="Search drawing no, title, job, draughtsman..."><select id="dst"><option value="">All statuses</option>'+DRW_STATUS.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select><select id="ddm"><option value="">All draughtsmen</option>'+people.map(function(p){return '<option>'+p.p+'</option>';}).join('')+'</select></div>'
+  +'<div class="tw tw-compact"><table><thead><tr><th style="width:96px">Drawing no</th><th>Title</th><th style="width:76px">Job / Lead</th><th style="width:96px">Draughtsman</th><th style="width:40px;text-align:center">Rev</th><th style="width:104px">Status</th><th style="width:64px">Issued</th><th style="width:54px;text-align:center">Age</th><th style="width:40px;text-align:center">Hrs</th><th style="width:54px">Actions</th></tr></thead><tbody id="dtb">'+rDrwRows()+'</tbody></table></div></div>';
+}
+
+function rDrwRows(){
+  var s=document.getElementById('ds')?document.getElementById('ds').value.toLowerCase():'';
+  var st=gv('dst'),dm=gv('ddm');
+  var f=drws.filter(function(d){
+    if(s&&((d.drw_no||'')+(d.title||'')+(d.job_ref||'')+(d.draughtsman||'')).toLowerCase().indexOf(s)<0)return false;
+    if(st&&d.status!==st)return false;
+    if(dm&&d.draughtsman!==dm)return false;
+    return true;
+  });
+  if(!f.length)return '<tr><td colspan="10" class="empty">No drawings found</td></tr>';
+  return f.map(function(d){
+    var age=d.status==='Issued to client'?drwAge(d.issued_date):0;
+    var ageCell=age===0?'<span style="color:#cbd5e0">—</span>':'<span style="font-family:monospace;font-weight:700;color:'+(age>=14?'#c53030':age>=7?'#d97706':'#276749')+'">'+age+'d</span>';
+    var shortD=function(x){if(!x)return '—';var p=String(x).split('-');return p.length===3?p[2]+'/'+p[1]:x;};
+    var jobCell=d.job_ref?'<span class="mono">'+d.job_ref+'</span>':(d.lead_ref?'<span class="mono" style="color:#805ad5" title="Quote stage">'+d.lead_ref+'</span>':'<span style="color:#cbd5e0">—</span>');
+    return '<tr'+(d.status==='Superseded'?' style="opacity:.5"':'')+'>'
+    +'<td class="mono" style="font-weight:600">'+(d.drw_no||'')+'</td>'
+    +'<td title="'+(d.title||'')+'" style="max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(d.title||'—')+'</td>'
+    +'<td>'+jobCell+'</td>'
+    +'<td title="'+(d.draughtsman||'')+'" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(d.draughtsman||'—')+'</td>'
+    +'<td style="text-align:center;font-family:monospace;font-weight:600">'+(d.revision||'0')+'</td>'
+    +'<td>'+drwBadge(d.status||'Not started')+'</td>'
+    +'<td class="mono">'+shortD(d.issued_date)+'</td>'
+    +'<td style="text-align:center">'+ageCell+'</td>'
+    +'<td style="text-align:center;font-family:monospace">'+(+d.hours||0)+'</td>'
+    +'<td style="white-space:nowrap"><button class="btn-g" style="padding:2px 3px" data-id="'+d.id+'" data-action="editDrw">&#9998;</button><button class="btn-d" style="padding:2px 3px" data-id="'+d.id+'" data-action="delDrw">&#10005;</button></td>'
+    +'</tr>';
+  }).join('');
+}
+
+function oDrw(id){
+  var d=id?(function(){for(var i=0;i<drws.length;i++){if(drws[i].id===id)return drws[i];}return null;})():null;
+  var openOrds=orders.filter(function(o){return !o.invoiced;});
+  var openLeads=leads.filter(function(l){return l.status==='Lead'||l.status==='Quoted';});
+  var ordOpts=openOrds.map(function(o){return '<option value="'+o.ref+'"'+(d&&d.job_ref===o.ref?' selected':'')+'>'+o.ref+' — '+o.client+'</option>';}).join('');
+  var leadOpts=openLeads.map(function(l){return '<option value="'+l.ref+'"'+(d&&d.lead_ref===l.ref?' selected':'')+'>'+l.ref+' — '+l.client+'</option>';}).join('');
+  var isLead=d&&!d.job_ref&&d.lead_ref;
+  var dmList=lrates.filter(function(r){return r.active&&r.bu==='Draughting';}).map(function(r){return '<option value="'+r.emp_name+'">';}).join('');
+
+  openM('<div class="mtitle">'+(id?'Edit drawing':'New drawing')+'</div>'
+  +'<div class="mfr"><label>Linked to</label><select id="dLinkType" onchange="drwToggleLink()"><option value="job"'+(isLead?'':' selected')+'>A job (MM number)</option><option value="lead"'+(isLead?' selected':'')+'>A quote / lead &mdash; no order yet</option></select></div>'
+  +'<div class="mfr" id="dJobBox" style="display:'+(isLead?'none':'block')+'"><label>MM number</label><select id="dJob" onchange="drwAutoNo()"><option value="">Select job...</option>'+ordOpts+'</select></div>'
+  +'<div class="mfr" id="dLeadBox" style="display:'+(isLead?'block':'none')+'"><label>Lead reference</label><select id="dLead"><option value="">Select lead...</option>'+leadOpts+'</select></div>'
+  +'<div class="f2"><div class="mfr"><label>Drawing number</label><input id="dNo" value="'+(d?d.drw_no||'':'')+'"></div><div class="mfr"><label>Revision</label><input id="dRev" value="'+(d?d.revision||'0':'0')+'" placeholder="0, A, B..."></div></div>'
+  +'<div class="mfr"><label>Drawing title</label><input id="dTitle" value="'+(d?(d.title||'').replace(/"/g,'&quot;'):'')+'"></div>'
+  +'<div class="f2"><div class="mfr"><label>Draughtsman</label><input id="dDm" list="dDmList" value="'+(d?d.draughtsman||'':'')+'"><datalist id="dDmList">'+dmList+'</datalist></div><div class="mfr"><label>Hours spent</label><input type="number" id="dHrs" value="'+(d?+d.hours||0:0)+'" min="0"></div></div>'
+  +'<div class="mfr"><label>Status</label><select id="dSt" onchange="drwToggleDates()">'+DRW_STATUS.map(function(s){return '<option'+(d&&d.status===s?' selected':(!d&&s==='Not started'?' selected':''))+'>'+s+'</option>';}).join('')+'</select></div>'
+  +'<div class="f2" id="dDateBox"><div class="mfr"><label>Issued to client</label><input type="date" id="dIss" value="'+(d?d.issued_date||'':'')+'"></div><div class="mfr"><label>Approved date</label><input type="date" id="dAppr" value="'+(d?d.approved_date||'':'')+'"></div></div>'
+  +'<div class="mfr"><label>Notes</label><input id="dNotes" value="'+(d?(d.notes||'').replace(/"/g,'&quot;'):'')+'"></div>'
+  +'<div class="mfoot"><button class="btn" id="dCancel">Cancel</button><button class="btn btn-p" id="dSave">'+(id?'Update drawing':'Save drawing')+'</button></div>');
+
+  setTimeout(drwToggleDates,40);
+  document.getElementById('dCancel').addEventListener('click',closeM);
+  document.getElementById('dSave').addEventListener('click',function(){
+    var isL=gv('dLinkType')==='lead';
+    var jobRef=isL?'':gv('dJob');
+    var leadRef=isL?gv('dLead'):'';
+    if(!jobRef&&!leadRef){toast('Please select a job or a lead','e');return;}
+    if(!gv('dNo')){toast('Please enter a drawing number','e');return;}
+    var st=gv('dSt');
+    var iss=fmtD(gv('dIss')),appr=fmtD(gv('dAppr'));
+    if(st==='Issued to client'&&!iss){toast('Please set the issued date','e');return;}
+    if(st==='Approved'&&!appr){toast('Please set the approved date','e');return;}
+    var data={drw_no:gv('dNo'),title:gv('dTitle'),job_ref:jobRef,lead_ref:leadRef,draughtsman:gv('dDm'),revision:gv('dRev'),status:st,issued_date:iss,approved_date:appr,hours:+gv('dHrs')||0,notes:gv('dNotes')};
+    var p=id?dbPatch('drawings','id=eq.'+id,data):dbPost('drawings',data);
+    p.then(function(){closeM();return loadAll();}).then(function(){go('drawings');toast('Drawing saved','s');}).catch(function(e){toast(e.message,'e');});
+  });
+}
+
+function drwToggleLink(){
+  var isL=gv('dLinkType')==='lead';
+  var jb=document.getElementById('dJobBox'),lb=document.getElementById('dLeadBox');
+  if(jb)jb.style.display=isL?'none':'block';
+  if(lb)lb.style.display=isL?'block':'none';
+}
+
+function drwAutoNo(){
+  var el=document.getElementById('dNo');
+  if(el&&!el.value)el.value=autoDrwNo(gv('dJob'));
+}
+
+function drwToggleDates(){
+  var st=gv('dSt');
+  var box=document.getElementById('dDateBox');
+  if(!box)return;
+  box.style.display=(st==='Issued to client'||st==='Approved'||st==='Superseded')?'grid':'none';
+  if(st==='Issued to client'){var i=document.getElementById('dIss');if(i&&!i.value)i.value=td();}
+  if(st==='Approved'){var a=document.getElementById('dAppr');if(a&&!a.value)a.value=td();}
+}
+
 document.addEventListener('click',function(e){
   var tid=e.target.id;
   if(tid==='addLeadBtn'){oLead(null);return;}
@@ -2096,6 +2568,10 @@ document.addEventListener('click',function(e){
   if(tid==='addLRBtn'){oLR(null);return;}
   if(tid==='rptLabourBtn'){rLabourReport();return;}
   if(tid==='setHrsBtn'){oSetHours();return;}
+  if(tid==='addDrwBtn'){oDrw(null);return;}
+  if(tid==='plAddBtn'){oPlannerAdd();return;}
+  if(tid==='plWeekBtn'){plView='week';renderPlanner();document.getElementById('plWeekBtn').style.cssText='background:var(--navy);color:#fff;border-color:var(--navy)';document.getElementById('plMonthBtn').style.cssText='';return;}
+  if(tid==='plMonthBtn'){plView='month';renderPlanner();document.getElementById('plMonthBtn').style.cssText='background:var(--navy);color:#fff;border-color:var(--navy)';document.getElementById('plWeekBtn').style.cssText='';return;}
   if(tid==='addWIBtn'){oWI(null);return;}
   if(tid==='addLRBtn'){oLR(null);return;}
   var el=e.target.closest('[data-action]');
@@ -2120,6 +2596,12 @@ document.addEventListener('click',function(e){
   if(action==='editInv')oInv(id);
   if(action==='editLR')oLR(id);
   if(action==='delLR')cfm('Delete employee','Remove this employee?',function(){dbDel('labour_rates','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('lrates');toast('Deleted','s');});});
+  if(action==='editDrw'){oDrw(id);return;}
+  if(action==='delDrw'){cfm('Delete drawing','Permanently delete this drawing record?',function(){dbDel('drawings','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('drawings');toast('Deleted','s');});});return;}
+  if(action==='plEdit'){oPlannerEdit(id);return;}
+  if(action==='plDel'){cfm('Remove from planner','Remove this job from the planner? The job itself is not deleted.',function(){dbDel('planner_items','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('planner');setTimeout(renderPlanner,60);toast('Removed from planner','s');});});return;}
+  if(action==='plUp'){plannerMove(id,'up');return;}
+  if(action==='plDown'){plannerMove(id,'down');return;}
   if(action==='editWI')oWI(id);
   if(action==='printWI'){var pw=null;for(var i=0;i<wis.length;i++){if(wis[i].id===id){pw=wis[i];break;}}if(pw)printWI(pw);return;}
   if(action==='delWI')cfm('Delete WI','Permanently delete this work instruction?',function(){dbDel('work_instructions','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('wi');toast('Deleted','s');});});
@@ -2145,6 +2627,7 @@ document.addEventListener('change',function(e){
 
   if(el.id==='bbu'||el.id==='bst'){var tb=document.getElementById('btb');if(tb)tb.innerHTML=rSPOrows();}
   if(el.id==='wibu'||el.id==='wist'){var wtb=document.getElementById('witb');if(wtb)wtb.innerHTML=rWIRows();}
+  if(el.id==='dst'||el.id==='ddm'){var dtb=document.getElementById('dtb');if(dtb)dtb.innerHTML=rDrwRows();}
 });
 document.addEventListener('input',function(e){
   var el=e.target;
@@ -2153,6 +2636,7 @@ document.addEventListener('input',function(e){
   if(el.id==='js')fJCs();
   if(el.id==='bs'){var tb=document.getElementById('btb');if(tb)tb.innerHTML=rSPOrows();}
   if(el.id==='wis'){var wtb=document.getElementById('witb');if(wtb)wtb.innerHTML=rWIRows();}
+  if(el.id==='ds'){var dtb=document.getElementById('dtb');if(dtb)dtb.innerHTML=rDrwRows();}
 });
 
 function getOpenOrders(){return orders.filter(function(o){return !o.invoiced&&o.status!=='Completed';});}
