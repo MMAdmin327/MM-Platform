@@ -19,7 +19,7 @@ var USERS=[
   {u:'wearhod',p:'MM@Wear2026',name:'Wear HOD',role:'HOD',bu:'Wear Protection'},
   {u:'planner',p:'MM@Plan2026',name:'Planner',role:'Planner'}
 ];
-var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],msettings=[],planr=[],drws=[],cUser=null;
+var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],msettings=[],planr=[],drws=[],bepd=[],cUser=null;
 var plView='week';
 
 function dbGet(t,q){
@@ -44,8 +44,8 @@ function dbDel(t,q){
 
 function loadAll(){
   sync(true,'Loading...');
-  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];}),dbGet('work_instructions').catch(function(){return[];}),dbGet('month_settings').catch(function(){return[];}),dbGet('planner_items').catch(function(){return[];}),dbGet('drawings').catch(function(){return[];})]).then(function(res){
-    leads=res[0];orders=res[1];spos=res[2];jcs=[];invs=res[3];lrates=res[4]||[];wis=res[5]||[];msettings=res[6]||[];planr=(res[7]||[]).sort(function(a,b){return (+a.seq||0)-(+b.seq||0);});drws=res[8]||[];
+  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];}),dbGet('work_instructions').catch(function(){return[];}),dbGet('month_settings').catch(function(){return[];}),dbGet('planner_items').catch(function(){return[];}),dbGet('drawings').catch(function(){return[];}),dbGet('bep_data').catch(function(){return[];})]).then(function(res){
+    leads=res[0];orders=res[1];spos=res[2];jcs=[];invs=res[3];lrates=res[4]||[];wis=res[5]||[];msettings=res[6]||[];planr=(res[7]||[]).sort(function(a,b){return (+a.seq||0)-(+b.seq||0);});drws=res[8]||[];bepd=res[9]||[];
     sync(false,'Live');
   }).catch(function(e){sync(false,'Error',true);toast('Load error: '+e.message,'e');});
 }
@@ -1833,11 +1833,11 @@ function rReports(){
   +'<div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:4px">Production Report</div>'
   +'<div style="font-size:11px;color:#718096">KG produced vs target for Fabrication teams and Laser Cutting. Shows KG per hour.</div>'
   +'</button>'
-  +'<div style="background:#f4f6f9;border:1px dashed #e2e8f0;border-radius:10px;padding:20px;text-align:left;opacity:.5">'
-  +'<div style="font-size:28px;margin-bottom:8px">💰</div>'
-  +'<div style="font-size:13px;font-weight:700;color:#718096;margin-bottom:4px">Profitability Report</div>'
-  +'<div style="font-size:11px;color:#a0aec0">Coming soon</div>'
-  +'</div>'
+  +'<button class="report-card" id="rptBepBtn" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px;text-align:left;cursor:pointer;transition:box-shadow .2s;box-shadow:0 1px 3px rgba(0,0,0,.05)">'
+  +'<div style="font-size:28px;margin-bottom:8px">&#128200;</div>'
+  +'<div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:4px">Break-even Analysis</div>'
+  +'<div style="font-size:11px;color:#718096">Revenue against break-even per business unit, with profit and loss zones. CEO and Finance only.</div>'
+  +'</button>'
   +'<div style="background:#f4f6f9;border:1px dashed #e2e8f0;border-radius:10px;padding:20px;text-align:left;opacity:.5">'
   +'<div style="font-size:28px;margin-bottom:8px">📊</div>'
   +'<div style="font-size:13px;font-weight:700;color:#718096;margin-bottom:4px">BU Performance Report</div>'
@@ -2186,6 +2186,365 @@ function rProdReport(){
 
   var rc=document.getElementById('reportContent');
   if(rc)rc.innerHTML=content;
+}
+
+// ── BREAK-EVEN ANALYSIS ──────────────────────────────────────────────────────
+var BEP_BUS=['Total Company','Fabrication','Construction','Pumps','Motors','TMM','Mining Supplies','Wear Protection','Laser Cutting','Corporate'];
+var bepBU='Total Company',bepMonth=null,bepYear=null;
+
+function bepRec(y,m,bu){
+  for(var i=0;i<bepd.length;i++){
+    if(+bepd[i].year===y&&+bepd[i].month===m&&bepd[i].bu===bu)return bepd[i];
+  }
+  return null;
+}
+
+// Revenue pulled from Finance for a BU in a given month
+function bepFinanceRev(y,m,bu){
+  var t=0;
+  invs.forEach(function(i){
+    if(!i.invoiced_date)return;
+    var d=pDate(i.invoiced_date);
+    if(!d||d.getFullYear()!==y||d.getMonth()!==m)return;
+    if(bu!=='Total Company'&&i.bu!==bu)return;
+    t+=(+i.order_val||0);
+  });
+  return Math.round(t);
+}
+
+// Aggregate figures for the selected BU — Total Company sums the parts
+function bepFigures(y,m,bu){
+  if(bu==='Total Company'){
+    var rev=0,vc=0,fc=0,found=false;
+    bepd.forEach(function(r){
+      if(+r.year!==y||+r.month!==m)return;
+      if(r.bu==='TOTAL')return;
+      found=true;
+      rev+=(+r.revenue||0);vc+=(+r.variable_cost||0);fc+=(+r.fixed_cost||0);
+    });
+    var ovr=bepRec(y,m,'Total Company');
+    var ovrV=ovr&&+ovr.rev_override>=0?+ovr.rev_override:-1;
+    return {rev:rev,vc:vc,fc:fc,found:found,ovr:ovrV,rec:ovr};
+  }
+  var r=bepRec(y,m,bu);
+  if(!r)return {rev:0,vc:0,fc:0,found:false,ovr:-1,rec:null};
+  return {rev:+r.revenue||0,vc:+r.variable_cost||0,fc:+r.fixed_cost||0,found:true,
+          ovr:+r.rev_override>=0?+r.rev_override:-1,rec:r};
+}
+
+function rBEP(){
+  var canView=cUser&&(cUser.role==='CEO'||cUser.role==='Finance');
+  if(!canView){var rc0=document.getElementById('reportContent');if(rc0)rc0.innerHTML='<div class="card" style="margin-top:14px"><div class="empty">Break-even analysis is restricted to CEO and Finance.</div></div>';return;}
+
+  var now=new Date();
+  if(bepMonth===null)bepMonth=now.getMonth();
+  if(bepYear===null)bepYear=now.getFullYear();
+  var selM=document.getElementById('bepMonth')?+document.getElementById('bepMonth').value:bepMonth;
+  var selY=document.getElementById('bepYear')?+document.getElementById('bepYear').value:bepYear;
+  bepMonth=selM;bepYear=selY;
+
+  var f=bepFigures(selY,selM,bepBU);
+  var finRev=bepFinanceRev(selY,selM,bepBU);
+  var rev=f.ovr>=0?f.ovr:f.rev;
+  var vc=f.vc,fc=f.fc;
+  var vRate=rev>0?vc/rev:0;
+  var cm=1-vRate;
+  var totalCost=vc+fc;
+  var profit=rev-totalCost;
+  var margin=rev>0?profit/rev*100:0;
+  var bep=cm>0?fc/cm:0;
+  var gap=rev-bep;
+  var aboveBEP=rev>=bep&&bep>0;
+
+  var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var mAbbr=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Day of month BEP is crossed at current run rate
+  var daysInM=new Date(selY,selM+1,0).getDate();
+  var bepDay=(rev>0&&bep>0)?Math.ceil(bep/rev*daysInM):0;
+
+  function money(v){
+    var a=Math.abs(v);
+    if(a>=1e6)return 'R'+(v/1e6).toFixed(2)+'M';
+    if(a>=1e3)return 'R'+Math.round(v/1e3)+'k';
+    return 'R'+Math.round(v);
+  }
+  function fullR(v){return 'R '+Math.round(v).toLocaleString('en-ZA');}
+
+  // ── Chart ──
+  var W=900,H=380,PL=76,PR=24,PT=18,PB=44;
+  var pw=W-PL-PR,ph=H-PT-PB;
+  var maxX=Math.max(rev*1.35,bep*1.5,1);
+  var maxY=Math.max(rev*1.35,totalCost*1.2,fc*2,1);
+  function X(v){return PL+(v/maxX)*pw;}
+  function Y(v){return PT+ph-(v/maxY)*ph;}
+
+  var chart='';
+  if(rev>0||fc>0){
+    var bx=X(bep),by=Y(bep);
+    // Profit zone (revenue above total cost, right of BEP)
+    var profPoly='';
+    if(bep>0&&bep<maxX){
+      profPoly='<polygon points="'+bx+','+by+' '+X(maxX)+','+Y(maxX)+' '+X(maxX)+','+Y(fc+maxX*vRate)+'" fill="#276749" opacity=".10"/>';
+    }
+    var lossPoly='';
+    if(bep>0&&bep<maxX){
+      lossPoly='<polygon points="'+X(0)+','+Y(0)+' '+bx+','+by+' '+X(0)+','+Y(fc)+'" fill="#c53030" opacity=".10"/>';
+    }
+    // Gridlines
+    var grid='';
+    for(var g=0;g<=4;g++){
+      var gv=maxY*g/4;
+      grid+='<line x1="'+PL+'" y1="'+Y(gv)+'" x2="'+(W-PR)+'" y2="'+Y(gv)+'" stroke="#eef1f5" stroke-width="1"/>';
+      grid+='<text x="'+(PL-8)+'" y="'+(Y(gv)+4)+'" text-anchor="end" font-size="10" fill="#a0aec0" font-family="monospace">'+money(gv)+'</text>';
+    }
+    for(var g2=0;g2<=4;g2++){
+      var gx=maxX*g2/4;
+      grid+='<text x="'+X(gx)+'" y="'+(H-PB+18)+'" text-anchor="middle" font-size="10" fill="#a0aec0" font-family="monospace">'+money(gx)+'</text>';
+    }
+    chart='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block">'
+    +grid+lossPoly+profPoly
+    // Fixed cost line
+    +'<line x1="'+X(0)+'" y1="'+Y(fc)+'" x2="'+X(maxX)+'" y2="'+Y(fc)+'" stroke="#3182ce" stroke-width="2" stroke-dasharray="7,4"/>'
+    // Total cost line
+    +'<line x1="'+X(0)+'" y1="'+Y(fc)+'" x2="'+X(maxX)+'" y2="'+Y(fc+maxX*vRate)+'" stroke="#c8a45a" stroke-width="2.5"/>'
+    // Revenue line
+    +'<line x1="'+X(0)+'" y1="'+Y(0)+'" x2="'+X(maxX)+'" y2="'+Y(maxX)+'" stroke="#276749" stroke-width="2.5"/>'
+    // BEP marker
+    +(bep>0&&bep<maxX?'<line x1="'+bx+'" y1="'+PT+'" x2="'+bx+'" y2="'+(PT+ph)+'" stroke="#718096" stroke-width="1.5" stroke-dasharray="4,4"/>'
+      +'<circle cx="'+bx+'" cy="'+by+'" r="6" fill="#fff" stroke="#0f1923" stroke-width="2.5"/>'
+      +'<rect x="'+(bx-52)+'" y="'+(PT-2)+'" width="104" height="19" rx="4" fill="#0f1923"/>'
+      +'<text x="'+bx+'" y="'+(PT+12)+'" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" font-family="monospace">BEP '+money(bep)+'</text>':'')
+    // Actual position
+    +(rev>0?'<line x1="'+X(rev)+'" y1="'+PT+'" x2="'+X(rev)+'" y2="'+(PT+ph)+'" stroke="#3182ce" stroke-width="1" stroke-dasharray="3,3" opacity=".6"/>'
+      +'<path d="M'+(X(rev)-6)+','+(Y(rev)-6)+'L'+(X(rev)+6)+','+(Y(rev)+6)+'M'+(X(rev)+6)+','+(Y(rev)-6)+'L'+(X(rev)-6)+','+(Y(rev)+6)+'" stroke="#3182ce" stroke-width="3" stroke-linecap="round"/>'
+      +'<path d="M'+(X(rev)-6)+','+(Y(totalCost)-6)+'L'+(X(rev)+6)+','+(Y(totalCost)+6)+'M'+(X(rev)+6)+','+(Y(totalCost)-6)+'L'+(X(rev)-6)+','+(Y(totalCost)+6)+'" stroke="#c8a45a" stroke-width="3" stroke-linecap="round"/>':'')
+    +'<line x1="'+PL+'" y1="'+(PT+ph)+'" x2="'+(W-PR)+'" y2="'+(PT+ph)+'" stroke="#cbd5e0" stroke-width="1.5"/>'
+    +'<line x1="'+PL+'" y1="'+PT+'" x2="'+PL+'" y2="'+(PT+ph)+'" stroke="#cbd5e0" stroke-width="1.5"/>'
+    +'<text x="'+(PL+pw/2)+'" y="'+(H-6)+'" text-anchor="middle" font-size="11" fill="#718096">Revenue (R)</text>'
+    +'</svg>';
+  }
+
+  // ── Trend across the year ──
+  var trend='';
+  var tMonths=[];
+  for(var tm=0;tm<12;tm++){
+    var tf=bepFigures(selY,tm,bepBU);
+    if(!tf.found)continue;
+    var tr=tf.ovr>=0?tf.ovr:tf.rev;
+    var tcm=tr>0?1-(tf.vc/tr):0;
+    var tbep=tcm>0?tf.fc/tcm:0;
+    tMonths.push({m:tm,rev:tr,bep:tbep,profit:tr-tf.vc-tf.fc});
+  }
+  if(tMonths.length>1){
+    var tMax=Math.max.apply(null,tMonths.map(function(t){return Math.max(t.rev,t.bep);}))*1.15;
+    var TW=900,TH=170,TPL=76,TPR=24,TPT=12,TPB=30;
+    var tpw=TW-TPL-TPR,tph=TH-TPT-TPB;
+    var bw=tpw/tMonths.length;
+    var bars='';
+    tMonths.forEach(function(t,i){
+      var cx=TPL+i*bw+bw/2;
+      var rh=(t.rev/tMax)*tph, bh=(t.bep/tMax)*tph;
+      var above=t.rev>=t.bep;
+      bars+='<rect x="'+(cx-bw*0.28)+'" y="'+(TPT+tph-rh)+'" width="'+(bw*0.56)+'" height="'+rh+'" rx="3" fill="'+(above?'#276749':'#c53030')+'" opacity=".85"/>';
+      bars+='<line x1="'+(cx-bw*0.36)+'" y1="'+(TPT+tph-bh)+'" x2="'+(cx+bw*0.36)+'" y2="'+(TPT+tph-bh)+'" stroke="#0f1923" stroke-width="2.5" stroke-dasharray="5,3"/>';
+      bars+='<text x="'+cx+'" y="'+(TH-10)+'" text-anchor="middle" font-size="10" fill="#718096">'+mAbbr[t.m]+'</text>';
+      bars+='<text x="'+cx+'" y="'+(TPT+tph-rh-5)+'" text-anchor="middle" font-size="9" font-weight="700" fill="'+(above?'#276749':'#c53030')+'" font-family="monospace">'+money(t.rev)+'</text>';
+    });
+    trend='<div class="card"><div class="card-hd"><h3>Revenue vs break-even &mdash; '+selY+'</h3><div style="font-size:11px;color:#718096">Bar = revenue &middot; dashed line = break-even point</div></div>'
+    +'<div style="padding:14px"><svg viewBox="0 0 '+TW+' '+TH+'" style="width:100%;height:auto;display:block">'+bars+'</svg></div></div>';
+  }
+
+  var noData=!f.found&&rev===0&&fc===0;
+
+  var html='<div class="card" style="margin-top:14px">'
+  +'<div class="card-hd" style="background:var(--navy)">'
+  +'<h3 style="color:#fff">&#128200; Break-even Analysis &mdash; '+monthNames[selM]+' '+selY+'</h3>'
+  +'<div class="card-hd-r">'
+  +'<select id="bepMonth" onchange="rBEP()" style="font-size:12px;padding:5px 9px;border:1px solid rgba(255,255,255,.2);border-radius:var(--r);background:rgba(255,255,255,.1);color:#fff">'+monthNames.map(function(m,i){return '<option value="'+i+'"'+(i===selM?' selected':'')+'>'+m+'</option>';}).join('')+'</select>'
+  +'<select id="bepYear" onchange="rBEP()" style="font-size:12px;padding:5px 9px;border:1px solid rgba(255,255,255,.2);border-radius:var(--r);background:rgba(255,255,255,.1);color:#fff">'+[2025,2026,2027].map(function(y){return '<option value="'+y+'"'+(y===selY?' selected':'')+'>'+y+'</option>';}).join('')+'</select>'
+  +'<button class="btn btn-sm" id="bepEditBtn" style="background:var(--gold);color:var(--navy);border-color:var(--gold);font-weight:600">&#9998; Edit inputs</button>'
+  +'</div></div>'
+  // BU tabs
+  +'<div style="display:flex;gap:5px;padding:11px 14px;background:#f8fafc;border-bottom:1px solid var(--border);flex-wrap:wrap">'
+  +BEP_BUS.map(function(b){
+    var on=b===bepBU;
+    return '<button class="btn btn-sm bepbu" data-bu="'+b+'" style="'+(on?'background:var(--navy);color:#fff;border-color:var(--navy);font-weight:600':'')+'">'+b+'</button>';
+  }).join('')
+  +'</div>';
+
+  if(noData){
+    html+='<div class="empty">No data captured for '+bepBU+' in '+monthNames[selM]+' '+selY+'. Click <strong>Edit inputs</strong> to add it.</div></div>';
+    var rc1=document.getElementById('reportContent');
+    if(rc1)rc1.innerHTML=html;
+    bepWire();
+    return;
+  }
+
+  html+=
+  // KPI tiles
+  '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px;padding:14px;background:#f8fafc;border-bottom:1px solid var(--border)">'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Revenue</div><div style="font-size:20px;font-weight:700;font-family:monospace">'+money(rev)+'</div>'+(f.ovr>=0?'<div style="font-size:9px;color:#92400e">&#9998; Manual override</div>':'')+'</div>'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Fixed cost</div><div style="font-size:20px;font-weight:700;font-family:monospace">'+money(fc)+'</div></div>'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Total cost</div><div style="font-size:20px;font-weight:700;font-family:monospace">'+money(totalCost)+'</div><div style="font-size:9px;color:#718096">Var rate '+(vRate*100).toFixed(1)+'%</div></div>'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Net profit</div><div style="font-size:20px;font-weight:700;font-family:monospace;color:'+(profit>=0?'#276749':'#c53030')+'">'+money(profit)+'</div></div>'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Margin</div><div style="font-size:20px;font-weight:700;font-family:monospace;color:'+(margin>=10?'#276749':margin>=0?'#d97706':'#c53030')+'">'+margin.toFixed(1)+'%</div></div>'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Break-even</div><div style="font-size:20px;font-weight:700;font-family:monospace">'+(cm>0?money(bep):'&mdash;')+'</div>'+(bepDay>0&&bepDay<=daysInM?'<div style="font-size:9px;color:#718096">~day '+bepDay+' of '+daysInM+'</div>':'')+'</div>'
+  +'<div style="background:'+(aboveBEP?'#f0fff4':'#fff5f5')+';border:1.5px solid '+(aboveBEP?'#c6f6d5':'#fed7d7')+';border-radius:8px;padding:12px"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Status</div><div style="font-size:15px;font-weight:700;color:'+(aboveBEP?'#276749':'#9b1c1c')+'">'+(cm<=0?'&#9888; No margin':aboveBEP?'&#10003; Above BEP':'&#9888; Below BEP')+'</div><div style="font-size:10px;color:#718096;font-family:monospace">'+(gap>=0?'+':'')+money(gap)+'</div></div>'
+  +'</div>';
+
+  // Warning when contribution margin is negative
+  if(cm<=0){
+    html+='<div style="background:#fff5f5;border-bottom:1px solid #fed7d7;padding:11px 14px;font-size:12px;color:#9b1c1c"><strong>&#9888; Variable cost exceeds revenue</strong> &mdash; at a '+(vRate*100).toFixed(1)+'% variable rate there is no contribution margin, so no break-even point exists. Every additional rand of sales loses money at this cost structure.</div>';
+  }
+
+  // Finance comparison
+  if(finRev>0){
+    var diff=finRev-rev;
+    var pctDiff=rev>0?Math.abs(diff/rev*100):0;
+    html+='<div style="background:'+(pctDiff>5?'#fffbeb':'#f8fafc')+';border-bottom:1px solid var(--border);padding:9px 14px;font-size:11px;color:#718096;display:flex;gap:18px;flex-wrap:wrap;align-items:center">'
+    +'<span>Finance tab invoiced '+bepBU.toLowerCase()+' revenue for this month: <strong style="color:var(--navy);font-family:monospace">'+fullR(finRev)+'</strong></span>'
+    +'<span style="color:'+(pctDiff>5?'#92400e':'#718096')+'">Variance to captured figure: <strong style="font-family:monospace">'+(diff>=0?'+':'')+fullR(diff)+'</strong> ('+pctDiff.toFixed(1)+'%)</span>'
+    +'<button class="btn btn-sm" id="bepPullBtn" style="margin-left:auto">&#8635; Use Finance figure</button>'
+    +'</div>';
+  }
+
+  html+='<div style="padding:16px 14px">'+chart+'</div>'
+  +'<div style="display:flex;gap:20px;padding:0 14px 14px;font-size:11px;color:#718096;flex-wrap:wrap">'
+  +'<span><span style="display:inline-block;width:22px;height:3px;background:#276749;vertical-align:middle"></span> Revenue</span>'
+  +'<span><span style="display:inline-block;width:22px;height:3px;background:#c8a45a;vertical-align:middle"></span> Total cost</span>'
+  +'<span><span style="display:inline-block;width:22px;height:2px;background:#3182ce;vertical-align:middle"></span> Fixed cost</span>'
+  +'<span><span style="display:inline-block;width:11px;height:11px;background:#276749;opacity:.15;vertical-align:middle;border:1px solid #276749"></span> Profit zone</span>'
+  +'<span><span style="display:inline-block;width:11px;height:11px;background:#c53030;opacity:.15;vertical-align:middle;border:1px solid #c53030"></span> Loss zone</span>'
+  +'</div>';
+
+  // BU breakdown when viewing Total Company
+  if(bepBU==='Total Company'){
+    var buRows='';
+    BEP_BUS.forEach(function(b){
+      if(b==='Total Company')return;
+      var bf=bepFigures(selY,selM,b);
+      if(!bf.found)return;
+      var br=bf.ovr>=0?bf.ovr:bf.rev;
+      var bcm=br>0?1-(bf.vc/br):0;
+      var bbep=bcm>0?bf.fc/bcm:0;
+      var bp=br-bf.vc-bf.fc;
+      var bm=br>0?bp/br*100:0;
+      var ok=br>=bbep&&bbep>0;
+      buRows+='<tr><td style="padding:8px 12px;font-weight:500;border-bottom:1px solid #f4f6f9">'+b+'</td>'
+      +'<td style="padding:8px 12px;text-align:right;font-family:monospace;border-bottom:1px solid #f4f6f9">'+fullR(br)+'</td>'
+      +'<td style="padding:8px 12px;text-align:right;font-family:monospace;border-bottom:1px solid #f4f6f9;color:#718096">'+fullR(bf.vc)+'</td>'
+      +'<td style="padding:8px 12px;text-align:center;font-family:monospace;border-bottom:1px solid #f4f6f9">'+(br>0?(bf.vc/br*100).toFixed(1)+'%':'—')+'</td>'
+      +'<td style="padding:8px 12px;text-align:right;font-family:monospace;border-bottom:1px solid #f4f6f9;color:#718096">'+fullR(bf.fc)+'</td>'
+      +'<td style="padding:8px 12px;text-align:right;font-family:monospace;border-bottom:1px solid #f4f6f9">'+(bcm>0?fullR(bbep):'—')+'</td>'
+      +'<td style="padding:8px 12px;text-align:right;font-family:monospace;font-weight:600;border-bottom:1px solid #f4f6f9;color:'+(bp>=0?'#276749':'#c53030')+'">'+fullR(bp)+'</td>'
+      +'<td style="padding:8px 12px;text-align:center;border-bottom:1px solid #f4f6f9"><span style="font-family:monospace;font-weight:700;font-size:11px;color:'+(bm>=10?'#276749':bm>=0?'#d97706':'#c53030')+'">'+bm.toFixed(1)+'%</span></td>'
+      +'<td style="padding:8px 12px;text-align:center;border-bottom:1px solid #f4f6f9">'+(bcm<=0?'<span style="background:#fff5f5;color:#9b1c1c;border:1px solid #fed7d7;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700">NO MARGIN</span>':ok?'<span style="background:#f0fff4;color:#276749;border:1px solid #c6f6d5;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700">&#10003; ABOVE</span>':'<span style="background:#fff5f5;color:#9b1c1c;border:1px solid #fed7d7;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700">BELOW</span>')+'</td></tr>';
+    });
+    if(buRows){
+      html+='<div style="border-top:1px solid var(--border)"><div style="padding:11px 14px;font-size:12px;font-weight:600;color:var(--navy);background:#fafbfc;border-bottom:1px solid var(--border)">Business unit breakdown</div>'
+      +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+      +'<thead><tr style="background:#fafbfc">'
+      +'<th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--border)">Business unit</th>'
+      +'<th style="padding:9px 12px;text-align:right;font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--border)">Revenue</th>'
+      +'<th style="padding:9px 12px;text-align:right;font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--border)">Variable</th>'
+      +'<th style="padding:9px 12px;text-align:center;font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--border)">Var %</th>'
+      +'<th style="padding:9px 12px;text-align:right;font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--border)">Fixed</th>'
+      +'<th style="padding:9px 12px;text-align:right;font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--border)">Break-even</th>'
+      +'<th style="padding:9px 12px;text-align:right;font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--border)">Net profit</th>'
+      +'<th style="padding:9px 12px;text-align:center;font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--border)">Margin</th>'
+      +'<th style="padding:9px 12px;text-align:center;font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--border)">Status</th>'
+      +'</tr></thead><tbody>'+buRows+'</tbody></table></div></div>';
+    }
+  }
+
+  html+='</div>'+trend;
+
+  var rc=document.getElementById('reportContent');
+  if(rc)rc.innerHTML=html;
+  bepWire();
+}
+
+function bepWire(){
+  document.querySelectorAll('.bepbu').forEach(function(b){
+    b.addEventListener('click',function(){bepBU=this.getAttribute('data-bu');rBEP();});
+  });
+  var eb=document.getElementById('bepEditBtn');
+  if(eb)eb.addEventListener('click',function(){oBEPEdit();});
+  var pb=document.getElementById('bepPullBtn');
+  if(pb)pb.addEventListener('click',function(){bepPullFinance();});
+}
+
+function bepPullFinance(){
+  var y=bepYear,m=bepMonth;
+  var fin=bepFinanceRev(y,m,bepBU);
+  var rec=bepRec(y,m,bepBU);
+  var p;
+  if(rec)p=dbPatch('bep_data','id=eq.'+rec.id,{rev_override:fin});
+  else p=dbPost('bep_data',{year:y,month:m,bu:bepBU,revenue:0,variable_cost:0,fixed_cost:0,rev_override:fin});
+  p.then(function(){return loadAll();}).then(function(){go('reports');setTimeout(rBEP,80);toast('Revenue set from Finance','s');}).catch(function(e){toast(e.message,'e');});
+}
+
+function oBEPEdit(){
+  var y=bepYear,m=bepMonth,bu=bepBU;
+  var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var rec=bepRec(y,m,bu);
+  var f=bepFigures(y,m,bu);
+  var fin=bepFinanceRev(y,m,bu);
+  var isTotal=bu==='Total Company';
+
+  openM('<div class="mtitle">Break-even inputs &mdash; '+bu+' &middot; '+monthNames[m]+' '+y+'</div>'
+  +(isTotal?'<div style="background:#ebf4ff;border:1px solid #bee3f8;border-radius:6px;padding:9px 12px;font-size:11px;color:#1e3a5f;margin-bottom:13px">Total Company sums the business units automatically. You can only override revenue here &mdash; edit costs on each BU.</div>':'')
+  +(fin>0?'<div style="background:#f4f6f9;border-radius:6px;padding:9px 12px;font-size:11px;color:#718096;margin-bottom:13px">Finance tab shows <strong style="color:var(--navy);font-family:monospace">R '+Math.round(fin).toLocaleString('en-ZA')+'</strong> invoiced for this month. <button class="btn btn-sm" id="bepUseFin" style="margin-left:6px">Use this</button></div>':'')
+  +'<div class="mfr"><label>Actual revenue (R)'+(isTotal?' &mdash; override':'')+'</label><input type="number" id="bepRev" value="'+(f.ovr>=0?f.ovr:(isTotal?'':f.rev))+'" placeholder="'+(isTotal?Math.round(f.rev):'0')+'" oninput="bepCalcPrev()"></div>'
+  +(isTotal?'':'<div class="f2"><div class="mfr"><label>Variable cost (R)</label><input type="number" id="bepVar" value="'+f.vc+'" oninput="bepCalcPrev()"></div><div class="mfr"><label>Fixed cost / Opex (R)</label><input type="number" id="bepFix" value="'+f.fc+'" oninput="bepCalcPrev()"></div></div>')
+  +'<div style="background:#f8fafc;border:2px solid var(--navy);border-radius:8px;padding:12px;margin-bottom:11px;font-size:12px">'
+  +'<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="color:#718096">Variable rate</span><strong class="mono" id="bepPvr">&mdash;</strong></div>'
+  +'<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="color:#718096">Break-even</span><strong class="mono" id="bepPbep">&mdash;</strong></div>'
+  +'<div style="display:flex;justify-content:space-between;font-weight:700;font-size:13px"><span>Net profit</span><strong class="mono" id="bepPprofit">&mdash;</strong></div>'
+  +'</div>'
+  +(isTotal?'':'<div class="mfr"><label>Notes</label><input id="bepNotes" value="'+(rec&&rec.notes?rec.notes.replace(/"/g,'&quot;'):'')+'"></div>')
+  +'<div class="mfoot">'
+  +(rec&&+rec.rev_override>=0?'<button class="btn btn-del" id="bepClearOvr">Clear override</button>':'')
+  +'<button class="btn" id="bepCancel">Cancel</button><button class="btn btn-p" id="bepSave">Save</button></div>');
+
+  setTimeout(bepCalcPrev,40);
+  document.getElementById('bepCancel').addEventListener('click',closeM);
+  var uf=document.getElementById('bepUseFin');
+  if(uf)uf.addEventListener('click',function(){document.getElementById('bepRev').value=fin;bepCalcPrev();});
+  var co=document.getElementById('bepClearOvr');
+  if(co)co.addEventListener('click',function(){
+    dbPatch('bep_data','id=eq.'+rec.id,{rev_override:-1}).then(function(){return loadAll();}).then(function(){closeM();go('reports');setTimeout(rBEP,80);toast('Override cleared','s');}).catch(function(e){toast(e.message,'e');});
+  });
+
+  document.getElementById('bepSave').addEventListener('click',function(){
+    var revV=gv('bepRev');
+    var data;
+    if(isTotal){
+      data={rev_override:revV===''?-1:(+revV||0)};
+      var p=rec?dbPatch('bep_data','id=eq.'+rec.id,data)
+               :dbPost('bep_data',{year:y,month:m,bu:bu,revenue:0,variable_cost:0,fixed_cost:0,rev_override:revV===''?-1:(+revV||0)});
+      p.then(function(){return loadAll();}).then(function(){closeM();go('reports');setTimeout(rBEP,80);toast('Saved','s');}).catch(function(e){toast(e.message,'e');});
+      return;
+    }
+    data={year:y,month:m,bu:bu,revenue:+revV||0,variable_cost:+gv('bepVar')||0,fixed_cost:+gv('bepFix')||0,notes:gv('bepNotes')};
+    var p2=rec?dbPatch('bep_data','id=eq.'+rec.id,data):dbPost('bep_data',data);
+    p2.then(function(){return loadAll();}).then(function(){closeM();go('reports');setTimeout(rBEP,80);toast('Saved','s');}).catch(function(e){toast(e.message,'e');});
+  });
+}
+
+function bepCalcPrev(){
+  var rev=+gv('bepRev')||0;
+  var vEl=document.getElementById('bepVar');
+  var vc=vEl?(+vEl.value||0):bepFigures(bepYear,bepMonth,bepBU).vc;
+  var fEl=document.getElementById('bepFix');
+  var fc=fEl?(+fEl.value||0):bepFigures(bepYear,bepMonth,bepBU).fc;
+  var vr=rev>0?vc/rev:0, cm=1-vr;
+  var bep=cm>0?fc/cm:0, profit=rev-vc-fc;
+  var a=document.getElementById('bepPvr'),b=document.getElementById('bepPbep'),c=document.getElementById('bepPprofit');
+  if(a)a.textContent=(vr*100).toFixed(1)+'%';
+  if(b)b.textContent=cm>0?R(bep):'No margin';
+  if(c){c.textContent=R(profit);c.style.color=profit>=0?'#276749':'#c53030';}
 }
 
 function refreshLabourReport(){
@@ -2729,6 +3088,7 @@ document.addEventListener('click',function(e){
   if(tid==='addLRBtn'){oLR(null);return;}
   if(tid==='rptLabourBtn'){rLabourReport();return;}
   if(tid==='rptProdBtn'){rProdReport();return;}
+  if(tid==='rptBepBtn'){rBEP();return;}
   if(tid==='setHrsBtn'){oSetHours();return;}
   if(tid==='addDrwBtn'){oDrw(null);return;}
   if(tid==='plAddBtn'){oPlannerAdd();return;}
