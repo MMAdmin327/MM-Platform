@@ -1876,21 +1876,32 @@ function rLabourReport(){
   var selYear=document.getElementById('rptYear')?+document.getElementById('rptYear').value:now.getFullYear();
   var selBU=document.getElementById('rptBU')?document.getElementById('rptBU').value:'';
 
-  // Calculate working days in selected month (Mon-Sat, 8hrs each)
+  // Working days in the month (Mon-Sat, 8hrs each) — full month and to date
   var daysInMonth=new Date(selYear,selMonth+1,0).getDate();
-  var workDays=0;
+  var tNow=new Date();tNow.setHours(0,0,0,0);
+  var isCurrentMonth=(selMonth===tNow.getMonth()&&selYear===tNow.getFullYear());
+  var isFutureMonth=(selYear>tNow.getFullYear())||(selYear===tNow.getFullYear()&&selMonth>tNow.getMonth());
+  var lastDay=isCurrentMonth?tNow.getDate():daysInMonth;
+  var workDaysFull=0,workDaysToDate=0;
   for(var d=1;d<=daysInMonth;d++){
     var day=new Date(selYear,selMonth,d).getDay();
-    if(day>=1&&day<=6)workDays++; // Mon=1 to Sat=6
+    if(day>=1&&day<=6){workDaysFull++;if(d<=lastDay)workDaysToDate++;}
   }
-  var autoHrs=workDays*8;
+  if(isFutureMonth)workDaysToDate=0;
+  var workDays=workDaysToDate;
+  var autoHrsFull=workDaysFull*8;
+  var autoHrs=workDaysToDate*8;
   // Check for a manual override saved for this month
   var override=null;
   for(var mi=0;mi<msettings.length;mi++){
     if(+msettings[mi].month===selMonth&&+msettings[mi].year===selYear){override=msettings[mi];break;}
   }
-  var availHrsPerEmp=override&&+override.available_hrs>0?+override.available_hrs:autoHrs;
   var isOverride=!!(override&&+override.available_hrs>0);
+  var availHrsFull=isOverride?+override.available_hrs:autoHrsFull;
+  // Pro-rate the override by working days elapsed
+  var availHrsPerEmp=isOverride
+    ? (workDaysFull>0?Math.round(availHrsFull*workDaysToDate/workDaysFull):0)
+    : autoHrs;
 
   // Filter WIs for selected month/year
   var monthWIs=wis.filter(function(w){
@@ -1935,8 +1946,11 @@ function rLabourReport(){
     buTotals[e.bu].count++;
   });
 
-  var totalProd=emps.reduce(function(s,e){return s+e.prodHrs;},0);
-  var totalStand=emps.reduce(function(s,e){return s+e.standHrs;},0);
+  var rnd1=function(n){return Math.round(n*10)/10;};
+  emps.forEach(function(e){e.prodHrs=rnd1(e.prodHrs);e.standHrs=rnd1(e.standHrs);});
+  Object.keys(buTotals).forEach(function(k){buTotals[k].prodHrs=rnd1(buTotals[k].prodHrs);buTotals[k].standHrs=rnd1(buTotals[k].standHrs);});
+  var totalProd=rnd1(emps.reduce(function(s,e){return s+e.prodHrs;},0));
+  var totalStand=rnd1(emps.reduce(function(s,e){return s+e.standHrs;},0));
   var totalAvail=emps.length*availHrsPerEmp;
   var overallEff=totalAvail>0?Math.round(totalProd/totalAvail*100):0;
 
@@ -1999,7 +2013,7 @@ function rLabourReport(){
   +'</div></div>'
   // KPI tiles
   +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px;background:#f8fafc;border-bottom:1px solid var(--border)">'
-  +'<div style="background:#fff;border:1px solid '+(isOverride?'#c8a45a':'var(--border)')+';border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Available hrs / employee</div><div style="font-size:22px;font-weight:700;font-family:monospace">'+availHrsPerEmp+'</div><div style="font-size:10px;color:'+(isOverride?'#92400e':'#718096')+'">'+(isOverride?'&#9881; Manually set':workDays+' days Mon\u2013Sat @ 8hrs')+'</div></div>'
+  +'<div style="background:#fff;border:1px solid '+(isOverride?'#c8a45a':'var(--border)')+';border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Available hrs '+(isCurrentMonth?'to date':'/ employee')+'</div><div style="font-size:22px;font-weight:700;font-family:monospace">'+availHrsPerEmp+'</div><div style="font-size:10px;color:'+(isOverride?'#92400e':'#718096')+'">'+workDaysToDate+' of '+workDaysFull+' days'+(isOverride?' &middot; &#9881; pro-rated':'')+'</div></div>'
   +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Employees tracked</div><div style="font-size:22px;font-weight:700;font-family:monospace">'+emps.length+'</div><div style="font-size:10px;color:#718096">From WI entries</div></div>'
   +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Total productive hrs</div><div style="font-size:22px;font-weight:700;font-family:monospace;color:#276749">'+totalProd+'</div><div style="font-size:10px;color:#718096">of '+totalAvail+' available</div></div>'
   +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Overall efficiency</div><div style="font-size:22px;font-weight:700;font-family:monospace;color:'+effColor(overallEff)+'">'+overallEff+'%</div><div style="font-size:10px;color:#718096;margin-top:3px">'+effBar(overallEff)+'</div></div>'
@@ -2011,7 +2025,7 @@ function rLabourReport(){
   +'<thead><tr style="background:#fafbfc">'
   +'<th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Employee</th>'
   +'<th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">BU</th>'
-  +'<th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Available Hrs</th>'
+  +'<th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Available Hrs'+(isCurrentMonth?' to date':'')+'</th>'
   +'<th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;color:#276749;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Productive Hrs</th>'
   +'<th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;color:#c53030;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Standing Hrs</th>'
   +'<th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Unaccounted Hrs</th>'
@@ -2054,10 +2068,10 @@ function oSetHours(){
 
   openM('<div class="mtitle">&#9881; Set Available Hours — '+monthNames[selMonth]+' '+selYear+'</div>'
   +'<div style="background:#f4f6f9;border-radius:8px;padding:11px 13px;margin-bottom:13px;font-size:11px;color:#718096;line-height:1.7">'
-  +'<strong style="color:var(--navy)">Auto-calculated:</strong> '+workDays+' working days (Mon\u2013Sat) &times; 8 hrs = <strong style="color:var(--navy)">'+autoHrs+' hrs</strong><br>'
-  +'Adjust below to account for public holidays, shutdowns or short weeks.'
+  +'<strong style="color:var(--navy)">Auto-calculated:</strong> '+workDays+' working days (Mon\u2013Sat) &times; 8 hrs = <strong style="color:var(--navy)">'+autoHrs+' hrs</strong> for the full month<br>'
+  +'Adjust below to account for public holidays, shutdowns or short weeks. The report pro-rates this figure by working days elapsed.'
   +'</div>'
-  +'<div class="mfr"><label>Available hours per employee</label><input type="number" id="shHrs" value="'+curHrs+'" min="0"></div>'
+  +'<div class="mfr"><label>Available hours per employee &mdash; full month</label><input type="number" id="shHrs" value="'+curHrs+'" min="0"></div>'
   +'<div class="mfr"><label>Note (optional)</label><input id="shNote" value="'+(existing&&existing.note?existing.note:'')+'" placeholder="e.g. 2 public holidays, 1 week shutdown"></div>'
   +'<div class="mfoot">'
   +(existingId?'<button class="btn btn-del" id="resetHrs">Reset to auto</button>':'')
