@@ -3,6 +3,9 @@ var KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im
 var RHDRS={'apikey':KEY,'Authorization':'Bearer '+KEY};
 var WHDRS={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=representation'};
 var BUS=['Fabrication','Construction','Pumps','TMM','Motors','Wear Protection','Mining Supplies','Laser Cutting','Draughting'];
+var CAPTAINS=['Leon Kotse','Mandla Zulu','Isaac Modutoane'];
+var TEAM_TARGETS={'Leon Kotse':13333.33,'Mandla Zulu':13333.33,'Isaac Modutoane':13333.33};
+var BU_KG_TARGETS={'Laser Cutting':18000};
 var USERS=[
   {u:'martin',p:'MM@Admin2026',name:'Martin Spies',role:'CEO'},
   {u:'estimator',p:'MM@Est2026',name:'Estimator',role:'Estimator'},
@@ -844,33 +847,6 @@ function expFin(){
 
 
 // ── LABOUR RATES ─────────────────────────────────────────────────────────────
-function rLRates(){
-  var canView=cUser&&(cUser.role==='CEO'||cUser.role==='Finance');
-  if(!canView)return '<div class="empty">Access restricted — CEO and Finance only.</div>';
-  var tot=lrates.filter(function(r){return r.active;}).length;
-  return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Active employees</div><div class="kpi-v">'+tot+'</div></div><div class="kpi cgo"><div class="kpi-l">Avg rate</div><div class="kpi-v">'+R(lrates.filter(function(r){return r.active;}).reduce(function(s,r){return s+(+r.rate||0);},0)/Math.max(tot,1))+'</div><div class="kpi-s">Per hour excl</div></div><div class="kpi cb"><div class="kpi-l">Total employees</div><div class="kpi-v">'+lrates.length+'</div></div></div>'
-  +'<div class="card"><div class="card-hd"><h3>Labour rates register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addLRBtn">+ Add employee</button></div></div>'
-  +'<div class="tw"><table><thead><tr><th>Employee name</th><th>Trade / Role</th><th>Business unit</th><th>Rate per hour (R excl)</th><th>Status</th><th>Actions</th></tr></thead><tbody>'
-  +lrates.map(function(r){return '<tr><td style="font-weight:500">'+r.emp_name+'</td><td>'+r.trade+'</td><td><span class="badge b-bu">'+r.bu+'</span></td><td class="mono" style="font-weight:600">'+R(+r.rate)+'</td><td><span class="badge '+(r.active?'b-done':'b-lost')+'">'+(r.active?'Active':'Inactive')+'</span></td><td style="white-space:nowrap"><button class="btn-g" data-id="'+r.id+'" data-action="editLR">&#9998;</button> <button class="btn-d" data-id="'+r.id+'" data-action="delLR">&#10005;</button></td></tr>';}).join('')
-  +(lrates.length===0?'<tr><td colspan="6" class="empty">No employees loaded yet</td></tr>':'')
-  +'</tbody></table></div></div>';
-}
-
-function oLR(id){
-  var r=id?(function(){for(var i=0;i<lrates.length;i++){if(lrates[i].id===id)return lrates[i];}return null;})():{};
-  if(!r)r={};
-  openM('<div class="mtitle">'+(id?'Edit employee rate':'New employee rate')+'</div>'
-  +'<div class="mfr"><label>Employee full name</label><input id="mLRn" value="'+(r.emp_name||'')+'"></div>'
-  +'<div class="f2"><div class="mfr"><label>Trade / Role</label><input id="mLRt" value="'+(r.trade||'')+'"></div><div class="mfr"><label>Business unit</label>'+buS('mLRb',r.bu)+'</div></div>'
-  +'<div class="f2"><div class="mfr"><label>Rate per hour (R excl VAT)</label><input type="number" id="mLRr" value="'+(r.rate||0)+'"></div><div class="mfr"><label>Status</label><select id="mLRs"><option value="true"'+(r.active!==false?' selected':'')+'>Active</option><option value="false"'+(r.active===false?' selected':'')+'>Inactive</option></select></div></div>'
-  +'<div class="mfoot"><button class="btn" id="cancelLR">Cancel</button><button class="btn btn-p" id="saveLR">'+(id?'Update':'Save employee')+'</button></div>');
-  document.getElementById('cancelLR').addEventListener('click',closeM);
-  document.getElementById('saveLR').addEventListener('click',function(){
-    var b={emp_name:gv('mLRn'),trade:gv('mLRt'),bu:gv('mLRb'),rate:+gv('mLRr')||0,active:gv('mLRs')==='true'};
-    var p=id?dbPatch('labour_rates','id=eq.'+id,b):dbPost('labour_rates',b);
-    p.then(function(){closeM();return loadAll();}).then(function(){go('lrates');toast('Saved','s');}).catch(function(e){toast(e.message,'e');});
-  });
-}
 
 // ── UPGRADED JOB CARD FORM ────────────────────────────────────────────────────
 function oJCFull(editId){
@@ -1129,9 +1105,9 @@ function rLRates(){
   if(!canView)return '<div class="empty">Access restricted — CEO and Finance only.</div>';
   return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Active employees</div><div class="kpi-v">'+lrates.filter(function(r){return r.active;}).length+'</div></div><div class="kpi cgo"><div class="kpi-l">Total employees</div><div class="kpi-v">'+lrates.length+'</div></div></div>'
   +'<div class="card"><div class="card-hd"><h3>Employee labour rates</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addLRBtn">+ Add employee</button></div></div>'
-  +'<div class="tw"><table><thead><tr><th>Employee name</th><th>Trade / Role</th><th>Business unit</th><th>Rate per hour (R)</th><th>Status</th><th>Actions</th></tr></thead><tbody>'
-  +lrates.map(function(r){return '<tr><td style="font-weight:500">'+r.emp_name+'</td><td>'+r.trade+'</td><td><span class="badge b-bu">'+r.bu+'</span></td><td class="mono" style="font-weight:600">'+R(+r.rate)+'</td><td><span class="badge '+(r.active?'b-done':'b-lost')+'">'+(r.active?'Active':'Inactive')+'</span></td><td style="white-space:nowrap"><button class="btn-g" data-id="'+r.id+'" data-action="editLR">&#9998;</button> <button class="btn-d" data-id="'+r.id+'" data-action="delLR">&#10005;</button></td></tr>';}).join('')
-  +(lrates.length===0?'<tr><td colspan="6" class="empty">No employees loaded yet — add employees to enable WI labour costing</td></tr>':'')
+  +'<div class="tw"><table><thead><tr><th>Employee name</th><th>Trade / Role</th><th>Business unit</th><th>Team</th><th>Rate per hour (R)</th><th>Status</th><th>Actions</th></tr></thead><tbody>'
+  +lrates.map(function(r){var isCap=CAPTAINS.indexOf(r.emp_name)>=0;return '<tr><td style="font-weight:500">'+r.emp_name+(isCap?' <span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:4px">CAPTAIN</span>':'')+'</td><td>'+r.trade+'</td><td><span class="badge b-bu">'+r.bu+'</span></td><td style="font-size:11px">'+(r.team?r.team:'<span style="color:#cbd5e0">—</span>')+'</td><td class="mono" style="font-weight:600">'+R(+r.rate)+'</td><td><span class="badge '+(r.active?'b-done':'b-lost')+'">'+(r.active?'Active':'Inactive')+'</span></td><td style="white-space:nowrap"><button class="btn-g" data-id="'+r.id+'" data-action="editLR">&#9998;</button> <button class="btn-d" data-id="'+r.id+'" data-action="delLR">&#10005;</button></td></tr>';}).join('')
+  +(lrates.length===0?'<tr><td colspan="7" class="empty">No employees loaded yet — add employees to enable WI labour costing</td></tr>':'')
   +'</tbody></table></div></div>';
 }
 
@@ -1141,13 +1117,14 @@ function oLR(id){
   openM('<div class="mtitle">'+(id?'Edit employee rate':'Add employee')+'</div>'
   +'<div class="mfr"><label>Employee full name</label><input id="mLRn" value="'+(r.emp_name||'')+'"></div>'
   +'<div class="f2"><div class="mfr"><label>Trade / Role</label><input id="mLRt" value="'+(r.trade||'')+'"></div><div class="mfr"><label>Business unit</label>'+buS('mLRb',r.bu)+'</div></div>'
+  +'<div class="mfr"><label>Team (Fabrication only)</label><select id="mLRteam"><option value="">— No team —</option>'+CAPTAINS.map(function(c){return '<option value="'+c+'"'+(r.team===c?' selected':'')+'>'+c+'\u2019s team</option>';}).join('')+'</select></div>'
   +'<div class="f2"><div class="mfr"><label>Rate per hour (R excl VAT)</label><input type="number" id="mLRr" value="'+(r.rate||0)+'"></div><div class="mfr"><label>Status</label><select id="mLRs"><option value="true"'+(r.active!==false?' selected':'')+'>Active</option><option value="false"'+(r.active===false?' selected':'')+'>Inactive</option></select></div></div>'
   +'<div class="mfoot"><button class="btn" id="cancelLR">Cancel</button><button class="btn btn-p" id="saveLR">'+(id?'Update employee':'Save employee')+'</button></div>');
   document.getElementById('cancelLR').addEventListener('click',closeM);
   document.getElementById('saveLR').addEventListener('click',function(){
     var n=gv('mLRn').trim();
     if(!n){toast('Please enter employee name','e');return;}
-    var b={emp_name:n,trade:gv('mLRt'),bu:gv('mLRb'),rate:+gv('mLRr')||0,active:gv('mLRs')==='true'};
+    var b={emp_name:n,trade:gv('mLRt'),bu:gv('mLRb'),team:gv('mLRteam'),rate:+gv('mLRr')||0,active:gv('mLRs')==='true'};
     var p=id?dbPatch('labour_rates','id=eq.'+id,b):dbPost('labour_rates',b);
     p.then(function(){closeM();return loadAll();}).then(function(){go('lrates');toast('Employee saved','s');}).catch(function(e){toast(e.message,'e');});
   });
@@ -1851,11 +1828,11 @@ function rReports(){
   +'<div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:4px">Labour Efficiency Report</div>'
   +'<div style="font-size:11px;color:#718096">Available vs worked hours per employee per month. Identifies productivity and standing time patterns.</div>'
   +'</button>'
-  +'<div style="background:#f4f6f9;border:1px dashed #e2e8f0;border-radius:10px;padding:20px;text-align:left;opacity:.5">'
-  +'<div style="font-size:28px;margin-bottom:8px">📦</div>'
-  +'<div style="font-size:13px;font-weight:700;color:#718096;margin-bottom:4px">Materials Report</div>'
-  +'<div style="font-size:11px;color:#a0aec0">Coming soon</div>'
-  +'</div>'
+  +'<button class="report-card" id="rptProdBtn" style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px;text-align:left;cursor:pointer;transition:box-shadow .2s;box-shadow:0 1px 3px rgba(0,0,0,.05)">'
+  +'<div style="font-size:28px;margin-bottom:8px">&#9874;</div>'
+  +'<div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:4px">Production Report</div>'
+  +'<div style="font-size:11px;color:#718096">KG produced vs target for Fabrication teams and Laser Cutting. Shows KG per hour.</div>'
+  +'</button>'
   +'<div style="background:#f4f6f9;border:1px dashed #e2e8f0;border-radius:10px;padding:20px;text-align:left;opacity:.5">'
   +'<div style="font-size:28px;margin-bottom:8px">💰</div>'
   +'<div style="font-size:13px;font-weight:700;color:#718096;margin-bottom:4px">Profitability Report</div>'
@@ -2035,6 +2012,176 @@ function rLabourReport(){
   +(emps.length>0?'<tfoot>'+buRows+'<tr style="background:var(--navy)"><td style="padding:10px 12px;font-weight:700;color:#fff" colspan="2">GRAND TOTAL</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fff">'+totalAvail+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#a8f0c6">'+totalProd+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fca5a5">'+totalStand+'</td><td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fde68a">'+Math.max(0,totalAvail-totalProd-totalStand)+'</td><td style="padding:10px 12px;font-weight:700;color:'+(overallEff>=80?'#a8f0c6':overallEff>=60?'#fde68a':'#fca5a5')+'">'+overallEff+'%</td></tr></tfoot>':'')
   +'</table></div>'
   +(emps.length===0?'<div class="empty">No WI labour data found for '+monthNames[selMonth]+' '+selYear+(selBU?' — '+selBU:'')+'</div>':'')
+  +'</div>';
+
+  var rc=document.getElementById('reportContent');
+  if(rc)rc.innerHTML=content;
+}
+
+// ── PRODUCTION REPORT ────────────────────────────────────────────────────────
+function empTeam(name){for(var i=0;i<lrates.length;i++){if(lrates[i].emp_name===name)return lrates[i].team||'';}return '';}
+function empBU(name){for(var i=0;i<lrates.length;i++){if(lrates[i].emp_name===name)return lrates[i].bu||'';}return '';}
+
+function rProdReport(){
+  var now=new Date();
+  var selMonth=document.getElementById('prdMonth')?+document.getElementById('prdMonth').value:now.getMonth();
+  var selYear=document.getElementById('prdYear')?+document.getElementById('prdYear').value:now.getFullYear();
+  var selBU=document.getElementById('prdBU')?document.getElementById('prdBU').value:'Fabrication';
+
+  // Working days elapsed — same basis as the Labour Report
+  var daysInMonth=new Date(selYear,selMonth+1,0).getDate();
+  var tNow=new Date();tNow.setHours(0,0,0,0);
+  var isCurrentMonth=(selMonth===tNow.getMonth()&&selYear===tNow.getFullYear());
+  var isFuture=(selYear>tNow.getFullYear())||(selYear===tNow.getFullYear()&&selMonth>tNow.getMonth());
+  var lastDay=isCurrentMonth?tNow.getDate():daysInMonth;
+  var wdFull=0,wdToDate=0;
+  for(var d=1;d<=daysInMonth;d++){
+    var dow=new Date(selYear,selMonth,d).getDay();
+    if(dow>=1&&dow<=6){wdFull++;if(d<=lastDay)wdToDate++;}
+  }
+  if(isFuture)wdToDate=0;
+  var proRata=wdFull>0?wdToDate/wdFull:0;
+
+  // Pull WIs for the month in this BU
+  var mWIs=wis.filter(function(w){
+    if(!w.start_date)return false;
+    var dd=new Date(w.start_date);
+    return dd.getMonth()===selMonth&&dd.getFullYear()===selYear&&w.bu===selBU;
+  });
+
+  // Aggregate hours and KG per employee
+  var rows={};
+  mWIs.forEach(function(w){
+    var ld=w.labour_data?JSON.parse(w.labour_data):[];
+    ld.forEach(function(e){
+      if(!e.emp)return;
+      var hrs=(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);
+      var kg=+e.kg||0;
+      if(!rows[e.emp])rows[e.emp]={emp:e.emp,hrs:0,kg:0,team:empTeam(e.emp)};
+      rows[e.emp].hrs+=hrs;
+      rows[e.emp].kg+=kg;
+    });
+  });
+  var emps=Object.keys(rows).map(function(k){return rows[k];});
+  var r1=function(n){return Math.round(n*10)/10;};
+  emps.forEach(function(e){e.hrs=r1(e.hrs);e.kg=r1(e.kg);});
+
+  var isTeamBU=(selBU==='Fabrication');
+  var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  function pctCol(p){return p>=100?'#276749':p>=85?'#d97706':'#c53030';}
+  function bar(p){
+    var w=Math.min(p,100);
+    return '<div style="background:#f0f2f5;border-radius:4px;height:6px;width:70px;display:inline-block;vertical-align:middle;margin-left:6px"><div style="background:'+pctCol(p)+';width:'+w+'%;height:6px;border-radius:4px"></div></div>';
+  }
+
+  var bodyHTML='';
+  var totKg=0,totHrs=0,totTarget=0;
+
+  if(isTeamBU){
+    // Group by team captain
+    var teams={};
+    CAPTAINS.forEach(function(c){teams[c]={cap:c,hrs:0,kg:0,members:[]};});
+    var unassigned={cap:'',hrs:0,kg:0,members:[]};
+    emps.forEach(function(e){
+      var t=e.team&&teams[e.team]?teams[e.team]:unassigned;
+      t.hrs+=e.hrs;t.kg+=e.kg;t.members.push(e);
+    });
+
+    var teamBlocks='';
+    CAPTAINS.forEach(function(c){
+      var t=teams[c];
+      var target=r1((TEAM_TARGETS[c]||0)*proRata);
+      var pct=target>0?Math.round(t.kg/target*100):0;
+      var kgh=t.hrs>0?r1(t.kg/t.hrs):0;
+      totKg+=t.kg;totHrs+=t.hrs;totTarget+=target;
+      var memberRows=t.members.sort(function(a,b){return b.kg-a.kg;}).map(function(m){
+        var isCap=m.emp===c;
+        return '<tr><td style="padding:7px 12px;border-bottom:1px solid #f4f6f9;'+(isCap?'font-weight:600':'padding-left:24px')+'">'+(isCap?'':'&mdash; ')+m.emp+(isCap?' <span style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px">CAPTAIN</span>':'')+'</td>'
+        +'<td style="padding:7px 12px;text-align:center;font-family:monospace;border-bottom:1px solid #f4f6f9">'+m.hrs+'</td>'
+        +'<td style="padding:7px 12px;text-align:center;font-family:monospace;border-bottom:1px solid #f4f6f9;color:'+(m.kg>0?'#276749':'#cbd5e0')+';font-weight:'+(m.kg>0?'600':'400')+'">'+(m.kg>0?m.kg:'\\u2014')+'</td>'
+        +'<td colspan="3" style="border-bottom:1px solid #f4f6f9"></td></tr>';
+      }).join('');
+      teamBlocks+='<tr style="background:#f8fafc">'
+      +'<td style="padding:9px 12px;font-weight:700;color:var(--navy);border-bottom:1px solid var(--border)">'+c+'\\u2019s team <span style="color:#718096;font-weight:400;font-size:11px">('+t.members.length+')</span></td>'
+      +'<td style="padding:9px 12px;text-align:center;font-family:monospace;font-weight:700;border-bottom:1px solid var(--border)">'+r1(t.hrs)+'</td>'
+      +'<td style="padding:9px 12px;text-align:center;font-family:monospace;font-weight:700;color:#276749;border-bottom:1px solid var(--border)">'+r1(t.kg)+'</td>'
+      +'<td style="padding:9px 12px;text-align:center;font-family:monospace;font-weight:600;border-bottom:1px solid var(--border)">'+kgh+'</td>'
+      +'<td style="padding:9px 12px;text-align:center;font-family:monospace;border-bottom:1px solid var(--border);color:#718096">'+target+'</td>'
+      +'<td style="padding:9px 12px;border-bottom:1px solid var(--border);white-space:nowrap"><span style="font-family:monospace;font-weight:700;color:'+pctCol(pct)+'">'+pct+'%</span>'+bar(pct)+'</td></tr>'
+      +memberRows;
+    });
+    if(unassigned.members.length){
+      teamBlocks+='<tr style="background:#fffbeb"><td style="padding:9px 12px;font-weight:700;color:#92400e;border-bottom:1px solid var(--border)">&#9888; No team assigned <span style="font-weight:400;font-size:11px">('+unassigned.members.length+')</span></td>'
+      +'<td style="padding:9px 12px;text-align:center;font-family:monospace;font-weight:700;border-bottom:1px solid var(--border)">'+r1(unassigned.hrs)+'</td>'
+      +'<td style="padding:9px 12px;text-align:center;font-family:monospace;font-weight:700;border-bottom:1px solid var(--border)">'+r1(unassigned.kg)+'</td>'
+      +'<td colspan="3" style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:11px;color:#92400e">Assign these people to a team on the Labour Rates tab</td></tr>';
+      totHrs+=unassigned.hrs;totKg+=unassigned.kg;
+      teamBlocks+=unassigned.members.map(function(m){
+        return '<tr><td style="padding:7px 12px 7px 24px;border-bottom:1px solid #f4f6f9">&mdash; '+m.emp+'</td>'
+        +'<td style="padding:7px 12px;text-align:center;font-family:monospace;border-bottom:1px solid #f4f6f9">'+m.hrs+'</td>'
+        +'<td style="padding:7px 12px;text-align:center;font-family:monospace;border-bottom:1px solid #f4f6f9">'+(m.kg>0?m.kg:'\\u2014')+'</td>'
+        +'<td colspan="3" style="border-bottom:1px solid #f4f6f9"></td></tr>';
+      }).join('');
+    }
+    bodyHTML=teamBlocks;
+  }else{
+    // Flat BU view — Laser and anything else with a KG target
+    var buTarget=r1((BU_KG_TARGETS[selBU]||0)*proRata);
+    totTarget=buTarget;
+    emps.sort(function(a,b){return b.kg-a.kg;});
+    bodyHTML=emps.map(function(e){
+      totKg+=e.kg;totHrs+=e.hrs;
+      var kgh=e.hrs>0?r1(e.kg/e.hrs):0;
+      return '<tr><td style="padding:8px 12px;font-weight:500;border-bottom:1px solid #f4f6f9">'+e.emp+'</td>'
+      +'<td style="padding:8px 12px;text-align:center;font-family:monospace;border-bottom:1px solid #f4f6f9">'+e.hrs+'</td>'
+      +'<td style="padding:8px 12px;text-align:center;font-family:monospace;font-weight:600;color:'+(e.kg>0?'#276749':'#cbd5e0')+';border-bottom:1px solid #f4f6f9">'+(e.kg>0?e.kg:'\\u2014')+'</td>'
+      +'<td style="padding:8px 12px;text-align:center;font-family:monospace;border-bottom:1px solid #f4f6f9">'+kgh+'</td>'
+      +'<td colspan="2" style="border-bottom:1px solid #f4f6f9"></td></tr>';
+    }).join('');
+  }
+
+  totKg=r1(totKg);totHrs=r1(totHrs);totTarget=r1(totTarget);
+  var overallPct=totTarget>0?Math.round(totKg/totTarget*100):0;
+  var overallKgh=totHrs>0?r1(totKg/totHrs):0;
+  var fullTarget=isTeamBU?r1(CAPTAINS.reduce(function(s,c){return s+(TEAM_TARGETS[c]||0);},0)):(BU_KG_TARGETS[selBU]||0);
+
+  var content='<div class="card" style="margin-top:14px">'
+  +'<div class="card-hd" style="background:var(--navy)">'
+  +'<h3 style="color:#fff">&#9874; Production Report &mdash; '+monthNames[selMonth]+' '+selYear+'</h3>'
+  +'<div class="card-hd-r">'
+  +'<select id="prdBU" onchange="rProdReport()" style="font-size:12px;padding:5px 9px;border:1px solid rgba(255,255,255,.2);border-radius:var(--r);background:rgba(255,255,255,.1);color:#fff">'
+  +['Fabrication','Laser Cutting'].map(function(b){return '<option value="'+b+'"'+(selBU===b?' selected':'')+'>'+b+'</option>';}).join('')
+  +'</select>'
+  +'<select id="prdMonth" onchange="rProdReport()" style="font-size:12px;padding:5px 9px;border:1px solid rgba(255,255,255,.2);border-radius:var(--r);background:rgba(255,255,255,.1);color:#fff">'+monthNames.map(function(m,i){return '<option value="'+i+'"'+(i===selMonth?' selected':'')+'>'+m+'</option>';}).join('')+'</select>'
+  +'<select id="prdYear" onchange="rProdReport()" style="font-size:12px;padding:5px 9px;border:1px solid rgba(255,255,255,.2);border-radius:var(--r);background:rgba(255,255,255,.1);color:#fff">'+[2025,2026,2027].map(function(y){return '<option value="'+y+'"'+(y===selYear?' selected':'')+'>'+y+'</option>';}).join('')+'</select>'
+  +'</div></div>'
+  // KPIs
+  +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px;background:#f8fafc;border-bottom:1px solid var(--border)">'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">KG produced</div><div style="font-size:22px;font-weight:700;font-family:monospace;color:#276749">'+totKg.toLocaleString('en-ZA')+'</div><div style="font-size:10px;color:#718096">'+wdToDate+' of '+wdFull+' days</div></div>'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Target to date</div><div style="font-size:22px;font-weight:700;font-family:monospace">'+totTarget.toLocaleString('en-ZA')+'</div><div style="font-size:10px;color:#718096">of '+fullTarget.toLocaleString('en-ZA')+' full month</div></div>'
+  +'<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">KG per hour</div><div style="font-size:22px;font-weight:700;font-family:monospace">'+overallKgh+'</div><div style="font-size:10px;color:#718096">'+totHrs.toLocaleString('en-ZA')+' hrs booked</div></div>'
+  +'<div style="background:#fff;border:1px solid '+(overallPct>=100?'#c6f6d5':overallPct>=85?'#fcd34d':'#fed7d7')+';border-radius:8px;padding:12px;text-align:center"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;margin-bottom:4px">Against target</div><div style="font-size:22px;font-weight:700;font-family:monospace;color:'+pctCol(overallPct)+'">'+overallPct+'%</div><div style="font-size:10px;color:#718096;margin-top:3px">'+bar(overallPct)+'</div></div>'
+  +'</div>'
+  // Table
+  +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+  +'<thead><tr style="background:#fafbfc">'
+  +'<th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">'+(isTeamBU?'Team / Employee':'Employee')+'</th>'
+  +'<th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Hours</th>'
+  +'<th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;color:#276749;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">KG</th>'
+  +'<th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">KG/hr</th>'
+  +'<th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">Target</th>'
+  +'<th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border)">vs Target</th>'
+  +'</tr></thead><tbody>'+bodyHTML+'</tbody>'
+  +(emps.length?'<tfoot><tr style="background:var(--navy)"><td style="padding:10px 12px;font-weight:700;color:#fff">'+selBU.toUpperCase()+' TOTAL</td>'
+  +'<td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fff">'+totHrs+'</td>'
+  +'<td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#a8f0c6">'+totKg.toLocaleString('en-ZA')+'</td>'
+  +'<td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#fff">'+overallKgh+'</td>'
+  +'<td style="padding:10px 12px;text-align:center;font-family:monospace;font-weight:700;color:#cbd5e0">'+totTarget.toLocaleString('en-ZA')+'</td>'
+  +'<td style="padding:10px 12px;font-family:monospace;font-weight:700;color:'+(overallPct>=100?'#a8f0c6':overallPct>=85?'#fde68a':'#fca5a5')+'">'+overallPct+'%</td></tr></tfoot>':'')
+  +'</table></div>'
+  +(emps.length===0?'<div class="empty">No WI data for '+selBU+' in '+monthNames[selMonth]+' '+selYear+'</div>':'')
+  +'<div style="padding:10px 14px;background:#fcfcfd;border-top:1px solid var(--border);font-size:11px;color:#718096">KG is captured per employee row on the Work Instruction. For Fabrication, only the team captain enters KG &mdash; hours come from every team member.</div>'
   +'</div>';
 
   var rc=document.getElementById('reportContent');
@@ -2581,6 +2728,7 @@ document.addEventListener('click',function(e){
   if(tid==='apiKeyBtn'){oAPIKey();return;}
   if(tid==='addLRBtn'){oLR(null);return;}
   if(tid==='rptLabourBtn'){rLabourReport();return;}
+  if(tid==='rptProdBtn'){rProdReport();return;}
   if(tid==='setHrsBtn'){oSetHours();return;}
   if(tid==='addDrwBtn'){oDrw(null);return;}
   if(tid==='plAddBtn'){oPlannerAdd();return;}
