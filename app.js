@@ -2736,6 +2736,7 @@ function oStages(id){
   }
   var o=plannerOrder(it.job_ref);
   openM('<div class="mtitle">Job plan &mdash; '+it.job_ref+'</div>'
+  +'<style>#mov .mbox{max-width:760px}</style>'
   +'<div style="background:#f4f6f9;border-radius:6px;padding:9px 12px;font-size:11px;color:#718096;margin-bottom:12px">'+(o?o.client+' &nbsp;|&nbsp; '+o.bu+' &nbsp;|&nbsp; '+R(+o.order_val||0):it.job_ref)+'</div>'
   +'<div class="f2"><div class="mfr"><label>Job start date</label><input type="date" id="stJobStart" value="'+(it.start_date||td())+'" onchange="stageRecalc()"></div><div class="mfr"><label>Assigned to</label><input id="stAssign" value="'+(it.assigned_to||'')+'"></div></div>'
   +'<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">'
@@ -2789,7 +2790,8 @@ function stageRecalc(silent){
   document.querySelectorAll('.st-who').forEach(function(el,i){if(_stageBuf[i])_stageBuf[i].who=el.value;});
   document.querySelectorAll('.st-start').forEach(function(el,i){
     if(!_stageBuf[i])return;
-    if(el.value&&el.value!==_stageBuf[i].start){_stageBuf[i].pinned=true;_stageBuf[i].start=el.value;}
+    var orig=el.getAttribute('data-orig')||'';
+    if(el.value&&orig&&el.value!==orig){_stageBuf[i].pinned=true;_stageBuf[i].start=el.value;}
   });
   chainStages(_stageBuf,gv('stJobStart'));
   if(!silent)renderStageTable();
@@ -2813,16 +2815,16 @@ function renderStageTable(){
   }
 
   var rows=_stageBuf.map(function(s,i){
-    var pinIcon=s.pinned?'<button class="btn-g" style="padding:1px 3px;color:#d97706" onclick="stageUnpin('+i+')" title="Date pinned — click to unpin and re-chain">&#128204;</button>':'';
+    var pinIcon=s.pinned?' <button class="btn-g" style="padding:0 2px;color:#d97706;font-size:11px" onclick="stageUnpin('+i+')" title="Date pinned — click to release">&#128204;</button>':'';
     return '<tr>'
-    +'<td style="padding:3px;text-align:center;width:34px"><button class="btn-g" style="padding:0 2px;font-size:10px" onclick="stageMove('+i+',\'up\')">&#9650;</button><button class="btn-g" style="padding:0 2px;font-size:10px" onclick="stageMove('+i+',\'down\')">&#9660;</button></td>'
-    +'<td style="padding:3px"><input class="st-name" list="stageLib" value="'+(s.name||'')+'" onchange="stageRecalc()" placeholder="Stage name" style="width:100%;font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
-    +'<td style="padding:3px;width:56px"><input type="number" class="st-dur" value="'+(s.dur||0)+'" min="0" onchange="stageRecalc()" style="width:100%;font-size:11px;padding:4px;border:1px solid var(--border);border-radius:4px;text-align:center"></td>'
-    +'<td style="padding:3px;width:118px"><input type="date" class="st-start" value="'+(s.start||'')+'" onchange="stageRecalc()" style="width:100%;font-size:10px;padding:4px;border:1px solid '+(s.pinned?'#fcd34d':'var(--border)')+';border-radius:4px;background:'+(s.pinned?'#fffbeb':'#fff')+'">'+pinIcon+'</td>'
-    +'<td style="padding:3px;width:76px;font-family:monospace;font-size:10px;color:#718096;text-align:center">'+(s.finish?s.finish.split('-').reverse().slice(0,2).join('/'):'—')+'</td>'
-    +'<td style="padding:3px;width:96px"><input class="st-who" list="stEmpLib" value="'+(s.who||'')+'" onchange="stageRecalc()" placeholder="Who" style="width:100%;font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
-    +'<td style="padding:3px;width:52px"><input type="number" class="st-pct" value="'+(s.pct||0)+'" min="0" max="100" onchange="stageRecalc()" style="width:100%;font-size:11px;padding:4px;border:1px solid var(--border);border-radius:4px;text-align:center"></td>'
-    +'<td style="padding:3px;width:28px;text-align:center"><button class="btn-d" style="padding:1px 3px" onclick="stageDel('+i+')">&#10005;</button></td>'
+    +'<td style="padding:4px 2px;text-align:center;width:32px"><button class="btn-g" style="padding:0 2px;font-size:10px" onclick="stageMove('+i+',\'up\')">&#9650;</button><button class="btn-g" style="padding:0 2px;font-size:10px" onclick="stageMove('+i+',\'down\')">&#9660;</button></td>'
+    +'<td style="padding:4px 3px;min-width:150px"><input class="st-name" list="stageLib" value="'+(s.name||'')+'" onchange="stageRecalc()" placeholder="Stage name" style="width:100%;font-size:13px;font-weight:500;padding:6px 8px;border:1px solid var(--border);border-radius:4px"></td>'
+    +'<td style="padding:4px 3px;width:54px"><input type="number" class="st-dur" value="'+(s.dur||0)+'" min="0" onchange="stageRecalc()" style="width:100%;font-size:13px;font-weight:600;padding:6px 4px;border:1px solid var(--border);border-radius:4px;text-align:center"></td>'
+    +'<td style="padding:4px 3px;width:132px;white-space:nowrap"><input type="date" class="st-start" data-orig="'+(s.start||'')+'" value="'+(s.start||'')+'" onchange="stageRecalc()" style="width:112px;font-size:11px;padding:5px 4px;border:1px solid '+(s.pinned?'#fcd34d':'var(--border)')+';border-radius:4px;background:'+(s.pinned?'#fffbeb':'#fff')+'">'+pinIcon+'</td>'
+    +'<td style="padding:4px 3px;width:78px;font-family:monospace;font-size:12px;color:#4a5568;text-align:center;font-weight:600">'+(s.finish?s.finish.split('-').reverse().slice(0,2).join('/'):'—')+'</td>'
+    +'<td style="padding:4px 3px;width:112px"><input class="st-who" list="stEmpLib" value="'+(s.who||'')+'" onchange="stageRecalc()" placeholder="Who" style="width:100%;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:4px"></td>'
+    +'<td style="padding:4px 3px;width:56px"><input type="number" class="st-pct" value="'+(s.pct||0)+'" min="0" max="100" onchange="stageRecalc()" style="width:100%;font-size:12px;padding:6px 4px;border:1px solid var(--border);border-radius:4px;text-align:center"></td>'
+    +'<td style="padding:4px 2px;width:26px;text-align:center"><button class="btn-d" style="padding:2px 3px" onclick="stageDel('+i+')">&#10005;</button></td>'
     +'</tr>';
   }).join('');
 
@@ -2830,14 +2832,14 @@ function renderStageTable(){
   +'<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">'
   +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
   +'<thead><tr style="background:#fafbfc">'
-  +'<th style="padding:6px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Seq</th>'
-  +'<th style="padding:6px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;text-align:left;border-bottom:1px solid var(--border)">Stage</th>'
-  +'<th style="padding:6px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Days</th>'
-  +'<th style="padding:6px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Start</th>'
-  +'<th style="padding:6px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Finish</th>'
-  +'<th style="padding:6px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Who</th>'
-  +'<th style="padding:6px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">%</th>'
-  +'<th style="border-bottom:1px solid var(--border)"></th>'
+  +'<th style="padding:7px 2px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);width:32px">Seq</th>'
+  +'<th style="padding:7px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;text-align:left;border-bottom:1px solid var(--border);min-width:150px">Stage</th>'
+  +'<th style="padding:7px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);width:54px">Days</th>'
+  +'<th style="padding:7px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);width:132px">Start</th>'
+  +'<th style="padding:7px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);width:78px">Finish</th>'
+  +'<th style="padding:7px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);width:112px">Who</th>'
+  +'<th style="padding:7px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);width:56px">%</th>'
+  +'<th style="border-bottom:1px solid var(--border);width:26px"></th>'
   +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
   updateStageSummary();
 }
