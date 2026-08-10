@@ -2644,6 +2644,342 @@ function rPlanner(){
   +'<div id="plBody"></div></div>';
 }
 
+// ── JOB STAGES ───────────────────────────────────────────────────────────────
+var DEFAULT_STAGES=['Draughting','Procurement','Saw','Laser','Fit up','Weld','Fettle','Sandblast','Paint','QC','Delivery'];
+
+function stageLibrary(){
+  var lib=DEFAULT_STAGES.slice();
+  planr.forEach(function(p){
+    var st=p.stages?JSON.parse(p.stages):[];
+    st.forEach(function(s){if(s.name&&lib.indexOf(s.name)<0)lib.push(s.name);});
+  });
+  return lib;
+}
+
+function getStages(it){
+  if(!it||!it.stages)return [];
+  try{var s=JSON.parse(it.stages);return Array.isArray(s)?s:[];}catch(e){return [];}
+}
+
+// Add n working days (Mon-Sat) to a date
+function addWork(d,n){
+  var x=new Date(d.getTime());
+  var added=0;
+  if(n<=0)return x;
+  while(added<n-1){
+    x=pAdd(x,1);
+    if(x.getDay()!==0)added++;
+  }
+  return x;
+}
+function nextWork(d){
+  var x=pAdd(d,1);
+  while(x.getDay()===0)x=pAdd(x,1);
+  return x;
+}
+
+// Recalculate the chain: each stage starts after its predecessor unless pinned
+function chainStages(stages,jobStart){
+  var cur=pDate(jobStart)||new Date();
+  while(cur.getDay()===0)cur=pAdd(cur,1);
+  stages.forEach(function(s,i){
+    var dur=Math.max(0,+s.dur||0);
+    if(s.pinned&&s.start){
+      var ps=pDate(s.start);
+      if(ps)cur=ps;
+    }
+    s.start=pISO(cur);
+    if(dur===0){s.finish=pISO(cur);}
+    else{
+      var fin=addWork(cur,dur);
+      s.finish=pISO(fin);
+      cur=nextWork(fin);
+    }
+  });
+  return stages;
+}
+
+function jobSpan(it){
+  var st=getStages(it);
+  if(!st.length)return {start:it.start_date,finish:it.finish_date};
+  var mn=null,mx=null;
+  st.forEach(function(s){
+    var a=pDate(s.start),b=pDate(s.finish);
+    if(a&&(!mn||a<mn))mn=a;
+    if(b&&(!mx||b>mx))mx=b;
+  });
+  return {start:mn?pISO(mn):it.start_date,finish:mx?pISO(mx):it.finish_date};
+}
+
+function stagePct(it){
+  var st=getStages(it);
+  if(!st.length)return null;
+  var totDur=0,doneDur=0;
+  st.forEach(function(s){
+    var d=Math.max(+s.dur||0,0.5);
+    totDur+=d;
+    doneDur+=d*((+s.pct||0)/100);
+  });
+  return totDur>0?Math.round(doneDur/totDur*100):0;
+}
+
+// ── STAGE EDITOR ─────────────────────────────────────────────────────────────
+var _stageBuf=[],_stageItemId=null;
+
+function oStages(id){
+  var it=null;for(var i=0;i<planr.length;i++){if(planr[i].id===id){it=planr[i];break;}}
+  if(!it)return;
+  _stageItemId=id;
+  _stageBuf=getStages(it);
+  if(!_stageBuf.length){
+    _stageBuf=[];
+  }
+  var o=plannerOrder(it.job_ref);
+  openM('<div class="mtitle">Job plan &mdash; '+it.job_ref+'</div>'
+  +'<div style="background:#f4f6f9;border-radius:6px;padding:9px 12px;font-size:11px;color:#718096;margin-bottom:12px">'+(o?o.client+' &nbsp;|&nbsp; '+o.bu+' &nbsp;|&nbsp; '+R(+o.order_val||0):it.job_ref)+'</div>'
+  +'<div class="f2"><div class="mfr"><label>Job start date</label><input type="date" id="stJobStart" value="'+(it.start_date||td())+'" onchange="stageRecalc()"></div><div class="mfr"><label>Assigned to</label><input id="stAssign" value="'+(it.assigned_to||'')+'"></div></div>'
+  +'<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">'
+  +'<button class="btn btn-sm" id="stAddBtn">+ Add stage</button>'
+  +'<button class="btn btn-sm" id="stTemplateBtn">&#9776; Load standard sequence</button>'
+  +'<span style="margin-left:auto;font-size:11px;color:#718096;align-self:center">Durations in working days (Mon&ndash;Sat)</span>'
+  +'</div>'
+  +'<div id="stageTable"></div>'
+  +'<div id="stageSummary" style="background:#f8fafc;border:2px solid var(--navy);border-radius:8px;padding:11px 13px;margin:11px 0;font-size:12px"></div>'
+  +'<div class="mfoot"><button class="btn" id="stCancel">Cancel</button><button class="btn" id="stPrintBtn">&#128438; Print plan</button><button class="btn btn-p" id="stSave">Save job plan</button></div>');
+
+  renderStageTable();
+  document.getElementById('stCancel').addEventListener('click',closeM);
+  document.getElementById('stAddBtn').addEventListener('click',function(){stageAdd();});
+  document.getElementById('stTemplateBtn').addEventListener('click',function(){
+    if(_stageBuf.length&&!confirm('Replace the current stages with the standard sequence?'))return;
+    _stageBuf=DEFAULT_STAGES.map(function(n){return {name:n,dur:1,pct:0,who:'',pinned:false,start:'',finish:''};});
+    stageRecalc();
+  });
+  document.getElementById('stPrintBtn').addEventListener('click',function(){printJobPlan(id,_stageBuf,gv('stJobStart'),gv('stAssign'));});
+  document.getElementById('stSave').addEventListener('click',function(){
+    stageRecalc(true);
+    var span=_stageBuf.length?(function(){
+      var mn=null,mx=null;
+      _stageBuf.forEach(function(s){var a=pDate(s.start),b=pDate(s.finish);if(a&&(!mn||a<mn))mn=a;if(b&&(!mx||b>mx))mx=b;});
+      return {s:mn?pISO(mn):gv('stJobStart'),f:mx?pISO(mx):gv('stJobStart')};
+    })():{s:gv('stJobStart'),f:it.finish_date||gv('stJobStart')};
+    dbPatch('planner_items','id=eq.'+id,{stages:JSON.stringify(_stageBuf),start_date:span.s,finish_date:span.f,assigned_to:gv('stAssign')})
+    .then(function(){closeM();return loadAll();}).then(function(){go('planner');setTimeout(renderPlanner,60);toast('Job plan saved','s');}).catch(function(e){toast(e.message,'e');});
+  });
+}
+
+function stageAdd(){
+  _stageBuf.push({name:'',dur:1,pct:0,who:'',pinned:false,start:'',finish:''});
+  stageRecalc();
+}
+
+function stageDel(i){_stageBuf.splice(i,1);stageRecalc();}
+function stageMove(i,dir){
+  var j=dir==='up'?i-1:i+1;
+  if(j<0||j>=_stageBuf.length)return;
+  var t=_stageBuf[i];_stageBuf[i]=_stageBuf[j];_stageBuf[j]=t;
+  stageRecalc();
+}
+
+function stageRecalc(silent){
+  // Read current field values back into the buffer
+  document.querySelectorAll('.st-name').forEach(function(el,i){if(_stageBuf[i])_stageBuf[i].name=el.value;});
+  document.querySelectorAll('.st-dur').forEach(function(el,i){if(_stageBuf[i])_stageBuf[i].dur=+el.value||0;});
+  document.querySelectorAll('.st-pct').forEach(function(el,i){if(_stageBuf[i])_stageBuf[i].pct=Math.min(100,Math.max(0,+el.value||0));});
+  document.querySelectorAll('.st-who').forEach(function(el,i){if(_stageBuf[i])_stageBuf[i].who=el.value;});
+  document.querySelectorAll('.st-start').forEach(function(el,i){
+    if(!_stageBuf[i])return;
+    if(el.value&&el.value!==_stageBuf[i].start){_stageBuf[i].pinned=true;_stageBuf[i].start=el.value;}
+  });
+  chainStages(_stageBuf,gv('stJobStart'));
+  if(!silent)renderStageTable();
+}
+
+function stageUnpin(i){
+  if(_stageBuf[i]){_stageBuf[i].pinned=false;stageRecalc();}
+}
+
+function renderStageTable(){
+  var host=document.getElementById('stageTable');
+  if(!host)return;
+  var lib=stageLibrary();
+  var dl='<datalist id="stageLib">'+lib.map(function(n){return '<option value="'+n+'">';}).join('')+'</datalist>';
+  var emps=lrates.filter(function(r){return r.active;}).map(function(r){return '<option value="'+r.emp_name+'">';}).join('');
+
+  if(!_stageBuf.length){
+    host.innerHTML=dl+'<div style="border:1px dashed var(--border);border-radius:8px;padding:22px;text-align:center;color:#a0aec0;font-size:12px">No stages yet &mdash; click <strong>+ Add stage</strong> or load the standard sequence.</div>';
+    updateStageSummary();
+    return;
+  }
+
+  var rows=_stageBuf.map(function(s,i){
+    var pinIcon=s.pinned?'<button class="btn-g" style="padding:1px 3px;color:#d97706" onclick="stageUnpin('+i+')" title="Date pinned — click to unpin and re-chain">&#128204;</button>':'';
+    return '<tr>'
+    +'<td style="padding:3px;text-align:center;width:34px"><button class="btn-g" style="padding:0 2px;font-size:10px" onclick="stageMove('+i+',\'up\')">&#9650;</button><button class="btn-g" style="padding:0 2px;font-size:10px" onclick="stageMove('+i+',\'down\')">&#9660;</button></td>'
+    +'<td style="padding:3px"><input class="st-name" list="stageLib" value="'+(s.name||'')+'" onchange="stageRecalc()" placeholder="Stage name" style="width:100%;font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
+    +'<td style="padding:3px;width:56px"><input type="number" class="st-dur" value="'+(s.dur||0)+'" min="0" onchange="stageRecalc()" style="width:100%;font-size:11px;padding:4px;border:1px solid var(--border);border-radius:4px;text-align:center"></td>'
+    +'<td style="padding:3px;width:118px"><input type="date" class="st-start" value="'+(s.start||'')+'" onchange="stageRecalc()" style="width:100%;font-size:10px;padding:4px;border:1px solid '+(s.pinned?'#fcd34d':'var(--border)')+';border-radius:4px;background:'+(s.pinned?'#fffbeb':'#fff')+'">'+pinIcon+'</td>'
+    +'<td style="padding:3px;width:76px;font-family:monospace;font-size:10px;color:#718096;text-align:center">'+(s.finish?s.finish.split('-').reverse().slice(0,2).join('/'):'—')+'</td>'
+    +'<td style="padding:3px;width:96px"><input class="st-who" list="stEmpLib" value="'+(s.who||'')+'" onchange="stageRecalc()" placeholder="Who" style="width:100%;font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:4px"></td>'
+    +'<td style="padding:3px;width:52px"><input type="number" class="st-pct" value="'+(s.pct||0)+'" min="0" max="100" onchange="stageRecalc()" style="width:100%;font-size:11px;padding:4px;border:1px solid var(--border);border-radius:4px;text-align:center"></td>'
+    +'<td style="padding:3px;width:28px;text-align:center"><button class="btn-d" style="padding:1px 3px" onclick="stageDel('+i+')">&#10005;</button></td>'
+    +'</tr>';
+  }).join('');
+
+  host.innerHTML=dl+'<datalist id="stEmpLib">'+emps+'</datalist>'
+  +'<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">'
+  +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
+  +'<thead><tr style="background:#fafbfc">'
+  +'<th style="padding:6px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Seq</th>'
+  +'<th style="padding:6px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;text-align:left;border-bottom:1px solid var(--border)">Stage</th>'
+  +'<th style="padding:6px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Days</th>'
+  +'<th style="padding:6px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Start</th>'
+  +'<th style="padding:6px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Finish</th>'
+  +'<th style="padding:6px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">Who</th>'
+  +'<th style="padding:6px 3px;font-size:9px;color:#718096;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">%</th>'
+  +'<th style="border-bottom:1px solid var(--border)"></th>'
+  +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+  updateStageSummary();
+}
+
+function updateStageSummary(){
+  var el=document.getElementById('stageSummary');
+  if(!el)return;
+  if(!_stageBuf.length){el.innerHTML='<span style="color:#718096">Add stages to build the job plan.</span>';return;}
+  var mn=null,mx=null,totDur=0,doneDur=0;
+  _stageBuf.forEach(function(s){
+    var a=pDate(s.start),b=pDate(s.finish);
+    if(a&&(!mn||a<mn))mn=a;
+    if(b&&(!mx||b>mx))mx=b;
+    var d=Math.max(+s.dur||0,0.5);
+    totDur+=d;doneDur+=d*((+s.pct||0)/100);
+  });
+  var span=(mn&&mx)?pDiff(mn,mx)+1:0;
+  var pct=totDur>0?Math.round(doneDur/totDur*100):0;
+  el.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="color:#718096">Stages</span><strong class="mono">'+_stageBuf.length+'</strong></div>'
+  +'<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="color:#718096">Job window</span><strong class="mono">'+(mn?fd(pISO(mn)):'—')+' &rarr; '+(mx?fd(pISO(mx)):'—')+'</strong></div>'
+  +'<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="color:#718096">Calendar span</span><strong class="mono">'+span+' days</strong></div>'
+  +'<div style="display:flex;justify-content:space-between;font-weight:700"><span>Progress</span><strong class="mono" style="color:'+(pct>=100?'#276749':pct>=50?'#d97706':'#718096')+'">'+pct+'%</strong></div>';
+}
+
+// ── PRINT JOB PLAN ───────────────────────────────────────────────────────────
+function printJobPlan(id,stages,jobStart,assign){
+  var it=null;for(var i=0;i<planr.length;i++){if(planr[i].id===id){it=planr[i];break;}}
+  if(!it)return;
+  var o=plannerOrder(it.job_ref);
+  stages=stages||getStages(it);
+  if(!stages.length){toast('No stages to print','e');return;}
+
+  var mn=null,mx=null;
+  stages.forEach(function(s){
+    var a=pDate(s.start),b=pDate(s.finish);
+    if(a&&(!mn||a<mn))mn=a;
+    if(b&&(!mx||b>mx))mx=b;
+  });
+  var span=pDiff(mn,mx)+1;
+  var totDur=0,doneDur=0;
+  stages.forEach(function(s){var d=Math.max(+s.dur||0,0.5);totDur+=d;doneDur+=d*((+s.pct||0)/100);});
+  var overall=totDur>0?Math.round(doneDur/totDur*100):0;
+
+  var CW=760;
+  var rows=stages.map(function(s,i){
+    var a=pDate(s.start),b=pDate(s.finish);
+    var off=a?pDiff(mn,a):0;
+    var len=(a&&b)?pDiff(a,b)+1:1;
+    var left=(off/span)*CW, w=Math.max(4,(len/span)*CW);
+    return '<tr>'
+    +'<td class="c">'+(i+1)+'</td>'
+    +'<td><strong>'+(s.name||'&mdash;')+'</strong></td>'
+    +'<td class="c">'+(s.dur||0)+'</td>'
+    +'<td class="c mono">'+(s.start?fd(s.start):'&mdash;')+'</td>'
+    +'<td class="c mono">'+(s.finish?fd(s.finish):'&mdash;')+'</td>'
+    +'<td>'+(s.who||'&mdash;')+'</td>'
+    +'<td class="c">'+(s.pct||0)+'%</td>'
+    +'<td class="bar"><div class="track"><div class="seg" style="left:'+left+'px;width:'+w+'px"><div class="fill" style="width:'+(s.pct||0)+'%"></div></div></div></td>'
+    +'</tr>';
+  }).join('');
+
+  // Month scale
+  var scale='';
+  var cur=new Date(mn.getTime());
+  var groups=[];
+  while(cur<=mx){
+    var k=cur.getFullYear()+'-'+cur.getMonth();
+    if(!groups.length||groups[groups.length-1].k!==k)groups.push({k:k,label:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][cur.getMonth()],n:1});
+    else groups[groups.length-1].n++;
+    cur=pAdd(cur,1);
+  }
+  groups.forEach(function(g){
+    scale+='<div style="width:'+((g.n/span)*CW)+'px;border-right:1px solid #ccc;font-size:8px;color:#666;padding:2px 3px;overflow:hidden;white-space:nowrap">'+g.label+'</div>';
+  });
+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Job Plan '+it.job_ref+'</title><style>'
+  +'*{box-sizing:border-box;margin:0;padding:0}'
+  +'body{font-family:Arial,sans-serif;font-size:10px;color:#000;padding:18px}'
+  +'.hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f1923;padding-bottom:10px;margin-bottom:12px}'
+  +'.co{font-size:15px;font-weight:700;color:#0f1923}'
+  +'.sub{font-size:9px;color:#718096;margin-top:2px}'
+  +'.dt{font-size:20px;font-weight:700;color:#0f1923;text-align:right}'
+  +'.dr{font-size:9px;color:#718096;text-align:right;margin-top:2px}'
+  +'.st{background:#0f1923;color:#fff;font-weight:700;font-size:10px;padding:4px 8px;margin:10px 0 5px;letter-spacing:.05em;text-transform:uppercase}'
+  +'.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border:1px solid #ccc}'
+  +'.f{padding:5px 8px;border-right:1px solid #ccc}'
+  +'.f:last-child{border-right:none}'
+  +'.fl{font-size:8px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}'
+  +'.fv{font-size:11px;font-weight:600}'
+  +'table{width:100%;border-collapse:collapse;font-size:9px;margin-top:4px}'
+  +'th{background:#0f1923;color:#fff;padding:5px 6px;text-align:left;font-size:8px;text-transform:uppercase;letter-spacing:.04em}'
+  +'th.c,td.c{text-align:center}'
+  +'td{padding:5px 6px;border-bottom:1px solid #e2e8f0;vertical-align:middle}'
+  +'tr:nth-child(even) td{background:#f9fafb}'
+  +'.mono{font-family:monospace}'
+  +'.bar{width:'+CW+'px;padding:4px 0!important}'
+  +'.track{position:relative;height:13px;width:'+CW+'px;background:#f0f2f5;border-radius:3px}'
+  +'.seg{position:absolute;top:0;height:13px;background:#c8d8ee;border:1px solid #2E5FA3;border-radius:3px;overflow:hidden}'
+  +'.fill{height:100%;background:#2E5FA3;opacity:.85}'
+  +'.scale{display:flex;width:'+CW+'px;margin-left:0;border-bottom:1px solid #ccc}'
+  +'.sign{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}'
+  +'.sb{border:1px solid #ccc;padding:9px;border-radius:4px}'
+  +'.sl{border-bottom:1px solid #333;margin:18px 0 3px;height:1px}'
+  +'.ft{margin-top:14px;padding-top:7px;border-top:1px solid #ccc;display:flex;justify-content:space-between;font-size:8px;color:#718096}'
+  +'@page{size:A4 landscape;margin:10mm}'
+  +'</style></head><body>'
+  +'<div class="hd"><div><div class="co">Mine Minerals Supplies &amp; Services</div><div class="sub">Rustenburg &middot; 066 212 2225 &middot; info@mineminerals.co.za</div></div>'
+  +'<div><div class="dt">JOB PLAN</div><div class="dr">'+it.job_ref+' &middot; Rev 00</div></div></div>'
+  +'<div class="st">Job details</div>'
+  +'<div class="g4">'
+  +'<div class="f"><div class="fl">Job number</div><div class="fv">'+it.job_ref+'</div></div>'
+  +'<div class="f"><div class="fl">Client</div><div class="fv">'+(o?o.client:'&mdash;')+'</div></div>'
+  +'<div class="f"><div class="fl">Business unit</div><div class="fv">'+(o?o.bu:'&mdash;')+'</div></div>'
+  +'<div class="f"><div class="fl">Order value</div><div class="fv">'+(o?R(+o.order_val||0):'&mdash;')+'</div></div>'
+  +'</div>'
+  +'<div class="g4">'
+  +'<div class="f"><div class="fl">Planned start</div><div class="fv">'+fd(pISO(mn))+'</div></div>'
+  +'<div class="f"><div class="fl">Planned finish</div><div class="fv">'+fd(pISO(mx))+'</div></div>'
+  +'<div class="f"><div class="fl">Duration</div><div class="fv">'+span+' calendar days</div></div>'
+  +'<div class="f"><div class="fl">Responsible</div><div class="fv">'+(assign||it.assigned_to||'&mdash;')+'</div></div>'
+  +'</div>'
+  +'<div class="st">Programme &mdash; '+stages.length+' stages &middot; '+overall+'% complete</div>'
+  +'<table><thead><tr>'
+  +'<th class="c" style="width:22px">#</th><th style="width:110px">Stage</th><th class="c" style="width:36px">Days</th>'
+  +'<th class="c" style="width:62px">Start</th><th class="c" style="width:62px">Finish</th>'
+  +'<th style="width:80px">Responsible</th><th class="c" style="width:34px">%</th>'
+  +'<th><div class="scale">'+scale+'</div></th>'
+  +'</tr></thead><tbody>'+rows+'</tbody></table>'
+  +'<div class="st">Sign-off</div>'
+  +'<div class="sign">'
+  +'<div class="sb"><div class="fl">Planner</div><div class="sl"></div><div class="fl">Signature &nbsp;&nbsp; Date: ______________</div></div>'
+  +'<div class="sb"><div class="fl">Operations Manager</div><div class="sl"></div><div class="fl">Signature &nbsp;&nbsp; Date: ______________</div></div>'
+  +'</div>'
+  +'<div class="ft"><span>Mine Minerals Supplies &amp; Services &middot; Job Plan &middot; '+it.job_ref+'</span><span>Printed: '+new Date().toLocaleDateString('en-ZA')+'</span></div>'
+  +'<script>window.onload=function(){window.print();}<\/script>'
+  +'</body></html>';
+
+  var w=window.open('','_blank');
+  if(w){w.document.write(html);w.document.close();}
+  else toast('Allow popups to print','e');
+}
+
 function renderPlanner(){
   var host=document.getElementById('plBody');
   if(!host)return;
@@ -2658,7 +2994,8 @@ function renderPlanner(){
   // Determine date range
   var minD=null,maxD=null;
   items.forEach(function(it){
-    var s=pDate(it.start_date),f=pDate(it.finish_date);
+    var sp=jobSpan(it);
+    var s=pDate(sp.start),f=pDate(sp.finish);
     if(s&&(!minD||s<minD))minD=s;
     if(f&&(!maxD||f>maxD))maxD=f;
     if(s&&(!maxD||s>maxD))maxD=s;
@@ -2713,9 +3050,12 @@ function renderPlanner(){
     var bu=o?o.bu:'';
     var client=o?o.client:(it.job_ref==='NO_ORDER'?'—':'');
     var col=buColour(bu);
-    var s=pDate(it.start_date),f=pDate(it.finish_date);
+    var sp=jobSpan(it);
+    var s=pDate(sp.start),f=pDate(sp.finish);
     var days=(s&&f)?pDiff(s,f)+1:0;
-    var pct=plannerPct(it);
+    var stg=getStages(it);
+    var sPct=stagePct(it);
+    var pct=sPct!==null?sPct:plannerPct(it);
     var late=f&&f<today&&pct<100;
     var zebra=idx%2?'background:#fbfcfd;':'';
 
@@ -2728,11 +3068,12 @@ function renderPlanner(){
     +'<div style="width:118px;flex-shrink:0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:6px" title="'+client+'">'+client+'</div>'
     +'<div style="width:96px;flex-shrink:0"><span style="background:'+col+';color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;white-space:nowrap">'+(bu||'—')+'</span></div>'
     +'<div style="width:104px;flex-shrink:0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:6px" title="'+(it.assigned_to||'')+'">'+(it.assigned_to||'<span style="color:#cbd5e0">Unassigned</span>')+'</div>'
-    +'<div style="width:40px;flex-shrink:0;text-align:center;font-family:monospace;font-size:11px">'+(days||'—')+'</div>'
+    +'<div style="width:40px;flex-shrink:0;text-align:center;font-family:monospace;font-size:11px">'+(days||'—')+(stg.length?'<div style="font-size:8px;color:#a0aec0">'+stg.length+' stg</div>':'')+'</div>'
     +'<div style="width:44px;flex-shrink:0;text-align:center;font-family:monospace;font-size:11px;font-weight:700;color:'+(pct>=100?'#276749':pct>=50?'#d97706':'#718096')+'">'+pct+'%</div>'
     +'<div style="width:52px;flex-shrink:0;text-align:center;white-space:nowrap">'
-    +'<button class="btn-g" style="padding:2px 3px" data-id="'+it.id+'" data-action="plEdit">&#9998;</button>'
-    +'<button class="btn-d" style="padding:2px 3px" data-id="'+it.id+'" data-action="plDel">&#10005;</button>'
+    +'<button class="btn-g" style="padding:2px 2px" data-id="'+it.id+'" data-action="plStages" title="Job plan / stages">&#9776;</button>'
+    +'<button class="btn-g" style="padding:2px 2px" data-id="'+it.id+'" data-action="plEdit">&#9998;</button>'
+    +'<button class="btn-d" style="padding:2px 2px" data-id="'+it.id+'" data-action="plDel">&#10005;</button>'
     +'</div></div>';
 
     var bar='';
@@ -2747,6 +3088,29 @@ function renderPlanner(){
       +'</div>';
     }
     ganttRows+='<div style="position:relative;height:'+ROW+'px;border-bottom:1px solid #f0f2f5;'+zebra+'">'+bar+'</div>';
+    // Stage sub-rows
+    if(stg.length){
+      stg.forEach(function(sg){
+        var ss=pDate(sg.start),sf=pDate(sg.finish);
+        leftRows+='<div style="display:flex;align-items:center;height:26px;border-bottom:1px solid #f4f6f9;background:#fcfdfe">'
+        +'<div style="width:52px;flex-shrink:0"></div>'
+        +'<div style="width:86px;flex-shrink:0;font-size:10px;color:#a0aec0;padding-left:8px">&#8627;</div>'
+        +'<div style="width:214px;flex-shrink:0;font-size:11px;color:#4a5568;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(sg.name||'\u2014')+'</div>'
+        +'<div style="width:104px;flex-shrink:0;font-size:10px;color:#718096;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(sg.who||'')+'</div>'
+        +'<div style="width:40px;flex-shrink:0;text-align:center;font-family:monospace;font-size:10px;color:#718096">'+(sg.dur||0)+'</div>'
+        +'<div style="width:44px;flex-shrink:0;text-align:center;font-family:monospace;font-size:10px;color:'+((+sg.pct||0)>=100?'#276749':'#a0aec0')+'">'+(sg.pct||0)+'%</div>'
+        +'<div style="width:52px;flex-shrink:0"></div></div>';
+        var sbar='';
+        if(ss&&sf){
+          var ssi=colIndexFor(ss),sei=colIndexFor(sf);
+          var sl=ssi*colW, sw=Math.max(colW*0.5,(sei-ssi+1)*colW);
+          sbar='<div style="position:absolute;left:'+sl+'px;top:6px;width:'+sw+'px;height:14px;background:'+col+'1a;border:1px solid '+col+'66;border-radius:3px;overflow:hidden" title="'+(sg.name||'')+' — '+(sg.dur||0)+'d — '+(sg.pct||0)+'%">'
+          +'<div style="width:'+(sg.pct||0)+'%;height:100%;background:'+col+';opacity:.7"></div>'
+          +'<div style="position:absolute;inset:0;display:flex;align-items:center;padding:0 4px;font-size:8px;font-weight:600;color:#2d3748;white-space:nowrap;overflow:hidden">'+(sg.name||'')+'</div></div>';
+        }
+        ganttRows+='<div style="position:relative;height:26px;border-bottom:1px solid #f4f6f9;background:#fcfdfe">'+sbar+'</div>';
+      });
+    }
   });
 
   // Today marker
@@ -3120,6 +3484,8 @@ document.addEventListener('click',function(e){
   if(action==='delLR')cfm('Delete employee','Remove this employee?',function(){dbDel('labour_rates','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('lrates');toast('Deleted','s');});});
   if(action==='editDrw'){oDrw(id);return;}
   if(action==='delDrw'){cfm('Delete drawing','Permanently delete this drawing record?',function(){dbDel('drawings','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('drawings');toast('Deleted','s');});});return;}
+  if(action==='plStages'){oStages(id);return;}
+  if(action==='plPrint'){printJobPlan(id);return;}
   if(action==='plEdit'){oPlannerEdit(id);return;}
   if(action==='plDel'){cfm('Remove from planner','Remove this job from the planner? The job itself is not deleted.',function(){dbDel('planner_items','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('planner');setTimeout(renderPlanner,60);toast('Removed from planner','s');});});return;}
   if(action==='plUp'){plannerMove(id,'up');return;}
