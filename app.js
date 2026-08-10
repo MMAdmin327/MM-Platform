@@ -2639,6 +2639,8 @@ function rPlanner(){
   return '<div class="card"><div class="card-hd"><h3>Planner &mdash; job schedule</h3><div class="card-hd-r">'
   +'<button class="btn btn-sm" id="plWeekBtn" style="'+(plView==='week'?'background:var(--navy);color:#fff;border-color:var(--navy)':'')+'">Week view</button>'
   +'<button class="btn btn-sm" id="plMonthBtn" style="'+(plView==='month'?'background:var(--navy);color:#fff;border-color:var(--navy)':'')+'">Month view</button>'
+  +'<button class="btn btn-sm" id="plExpandBtn">&#9660; Expand all</button>'
+  +'<button class="btn btn-sm" id="plCollapseBtn">&#9654; Collapse all</button>'
   +'<button class="btn btn-p btn-sm" id="plAddBtn">+ Add job to planner</button>'
   +'</div></div>'
   +'<div id="plBody"></div></div>';
@@ -2725,6 +2727,7 @@ function stagePct(it){
 
 // ── STAGE EDITOR ─────────────────────────────────────────────────────────────
 var _stageBuf=[],_stageItemId=null;
+var plOpen={};
 
 function oStages(id){
   var it=null;for(var i=0;i<planr.length;i++){if(planr[i].id===id){it=planr[i];break;}}
@@ -3066,7 +3069,9 @@ function renderPlanner(){
     +'<button class="btn-g" style="padding:0 3px;font-size:11px;line-height:1" data-id="'+it.id+'" data-action="plUp" title="Move up">&#9650;</button>'
     +'<button class="btn-g" style="padding:0 3px;font-size:11px;line-height:1" data-id="'+it.id+'" data-action="plDown" title="Move down">&#9660;</button>'
     +'</div>'
-    +'<div style="width:86px;flex-shrink:0;font-family:monospace;font-size:11px;font-weight:600;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+it.job_ref+'</div>'
+    +'<div style="width:86px;flex-shrink:0;font-family:monospace;font-size:11px;font-weight:600;color:var(--navy);overflow:hidden;white-space:nowrap">'
+    +(stg.length?'<button class="btn-g" style="padding:0 3px;font-size:10px;color:#718096" data-id="'+it.id+'" data-action="plToggle" title="'+(plOpen[it.id]?'Collapse':'Expand')+' stages">'+(plOpen[it.id]?'&#9660;':'&#9654;')+'</button>':'<span style="display:inline-block;width:15px"></span>')
+    +it.job_ref+'</div>'
     +'<div style="width:118px;flex-shrink:0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:6px" title="'+client+'">'+client+'</div>'
     +'<div style="width:96px;flex-shrink:0"><span style="background:'+col+';color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;white-space:nowrap">'+(bu||'—')+'</span></div>'
     +'<div style="width:104px;flex-shrink:0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:6px" title="'+(it.assigned_to||'')+'">'+(it.assigned_to||'<span style="color:#cbd5e0">Unassigned</span>')+'</div>'
@@ -3084,14 +3089,26 @@ function renderPlanner(){
       var left,width;
       if(plView==='week'){left=si*colW;width=Math.max(colW,(ei-si+1)*colW);}
       else{left=si*colW;width=Math.max(colW,(ei-si+1)*colW);}
+      // When collapsed, draw each stage as a segment inside the job bar
+      var segs='';
+      if(stg.length&&!plOpen[it.id]){
+        stg.forEach(function(sg){
+          var gs=pDate(sg.start),gf=pDate(sg.finish);
+          if(!gs||!gf)return;
+          var gi=colIndexFor(gs),ge=colIndexFor(gf);
+          var gl=gi*colW-left, gw=Math.max(3,(ge-gi+1)*colW);
+          var done=(+sg.pct||0)>=100;
+          segs+='<div style="position:absolute;left:'+gl+'px;top:0;width:'+gw+'px;height:100%;border-right:1px solid #fff;background:'+col+';opacity:'+(done?'.9':(+sg.pct||0)>0?'.55':'.18')+'" title="'+(sg.name||'')+' — '+(sg.dur||0)+'d — '+(sg.pct||0)+'%"></div>';
+        });
+      }
       bar='<div style="position:absolute;left:'+left+'px;top:7px;width:'+width+'px;height:22px;background:'+col+'22;border:1.5px solid '+(late?'#c53030':col)+';border-radius:5px;overflow:hidden" title="'+it.job_ref+' — '+days+' days — '+pct+'%">'
-      +'<div style="width:'+pct+'%;height:100%;background:'+col+';opacity:.85"></div>'
-      +'<div style="position:absolute;inset:0;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:700;color:'+(pct>45?'#fff':'#2d3748')+';white-space:nowrap;overflow:hidden">'+(it.assigned_to||it.job_ref)+'</div>'
+      +(segs||'<div style="width:'+pct+'%;height:100%;background:'+col+';opacity:.85"></div>')
+      +'<div style="position:absolute;inset:0;display:flex;align-items:center;padding:0 6px;font-size:9px;font-weight:700;color:'+(pct>45?'#fff':'#2d3748')+';white-space:nowrap;overflow:hidden;text-shadow:0 0 3px rgba(255,255,255,.7)">'+(it.assigned_to||it.job_ref)+'</div>'
       +'</div>';
     }
     ganttRows+='<div style="position:relative;height:'+ROW+'px;border-bottom:1px solid #f0f2f5;'+zebra+'">'+bar+'</div>';
     // Stage sub-rows
-    if(stg.length){
+    if(stg.length&&plOpen[it.id]){
       stg.forEach(function(sg){
         var ss=pDate(sg.start),sf=pDate(sg.finish);
         leftRows+='<div style="display:flex;align-items:center;height:26px;border-bottom:1px solid #f4f6f9;background:#fcfdfe">'
@@ -3457,6 +3474,8 @@ document.addEventListener('click',function(e){
   if(tid==='rptBepBtn'){rBEP();return;}
   if(tid==='setHrsBtn'){oSetHours();return;}
   if(tid==='addDrwBtn'){oDrw(null);return;}
+  if(tid==='plExpandBtn'){planr.forEach(function(p){plOpen[p.id]=true;});renderPlanner();return;}
+  if(tid==='plCollapseBtn'){plOpen={};renderPlanner();return;}
   if(tid==='plAddBtn'){oPlannerAdd();return;}
   if(tid==='plWeekBtn'){plView='week';renderPlanner();document.getElementById('plWeekBtn').style.cssText='background:var(--navy);color:#fff;border-color:var(--navy)';document.getElementById('plMonthBtn').style.cssText='';return;}
   if(tid==='plMonthBtn'){plView='month';renderPlanner();document.getElementById('plMonthBtn').style.cssText='background:var(--navy);color:#fff;border-color:var(--navy)';document.getElementById('plWeekBtn').style.cssText='';return;}
@@ -3486,6 +3505,7 @@ document.addEventListener('click',function(e){
   if(action==='delLR')cfm('Delete employee','Remove this employee?',function(){dbDel('labour_rates','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('lrates');toast('Deleted','s');});});
   if(action==='editDrw'){oDrw(id);return;}
   if(action==='delDrw'){cfm('Delete drawing','Permanently delete this drawing record?',function(){dbDel('drawings','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('drawings');toast('Deleted','s');});});return;}
+  if(action==='plToggle'){plOpen[id]=!plOpen[id];renderPlanner();return;}
   if(action==='plStages'){oStages(id);return;}
   if(action==='plPrint'){printJobPlan(id);return;}
   if(action==='plEdit'){oPlannerEdit(id);return;}
