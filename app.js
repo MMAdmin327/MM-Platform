@@ -17,7 +17,8 @@ var USERS=[
   {u:'pumpshod',p:'MM@Pumps2026',name:'Pumps HOD',role:'HOD',bu:'Pumps',bu2:'Motors'},
   {u:'consthod',p:'MM@Const2026',name:'Const HOD',role:'HOD',bu:'Construction'},
   {u:'wearhod',p:'MM@Wear2026',name:'Wear HOD',role:'HOD',bu:'Wear Protection'},
-  {u:'planner',p:'MM@Plan2026',name:'Planner',role:'Planner'}
+  {u:'planner',p:'MM@Plan2026',name:'Planner',role:'Planner'},
+  {u:'draughting',p:'MM@Draw2026',name:'Draughting',role:'Draughting'}
 ];
 var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],msettings=[],planr=[],drws=[],bepd=[],cUser=null;
 var plView='week';
