@@ -3410,8 +3410,10 @@ function plannerMove(id,dir){
 }
 
 // ── DRAWINGS ─────────────────────────────────────────────────────────────────
-var DRW_STATUS=['Not started','In progress','Internal check','Issued to client','Approved','Superseded'];
-var DRW_SB={'Not started':'background:#f7fafc;color:#4a5568;border-color:#e2e8f0','In progress':'background:#ebf4ff;color:#1e3a5f;border-color:#bee3f8','Internal check':'background:#faf5ff;color:#44337a;border-color:#d6bcfa','Issued to client':'background:#fffbeb;color:#92400e;border-color:#fcd34d','Approved':'background:#f0fff4;color:#276749;border-color:#c6f6d5','Superseded':'background:#f7fafc;color:#a0aec0;border-color:#e2e8f0'};
+var DRW_STATUS=['Not started','In progress','Internal check','Complete','Issued to client','Approved','Issued for Procurement','Superseded'];
+var DRW_SB={'Not started':'background:#f7fafc;color:#4a5568;border-color:#e2e8f0','In progress':'background:#ebf4ff;color:#1e3a5f;border-color:#bee3f8','Internal check':'background:#faf5ff;color:#44337a;border-color:#d6bcfa','Complete':'background:#e6fffa;color:#234e52;border-color:#b2f5ea','Issued to client':'background:#fffbeb;color:#92400e;border-color:#fcd34d','Approved':'background:#f0fff4;color:#276749;border-color:#c6f6d5','Issued for Procurement':'background:#f0fff4;color:#22543d;border-color:#9ae6b4','Superseded':'background:#f7fafc;color:#a0aec0;border-color:#e2e8f0'};
+// Statuses that clear the fabrication gate
+var DRW_PASSED=['Approved','Issued for Procurement'];
 function drwBadge(s){return '<span class="badge" style="'+(DRW_SB[s]||DRW_SB['Not started'])+'">'+s+'</span>';}
 
 function drwAge(d){if(!d)return 0;var a=pDate(d);if(!a)return 0;var t=new Date();t.setHours(0,0,0,0);return Math.max(0,Math.round((t-a)/86400000));}
@@ -3420,7 +3422,7 @@ function drwAge(d){if(!d)return 0;var a=pDate(d);if(!a)return 0;var t=new Date()
 function jobDrwStatus(ref){
   var jd=drws.filter(function(d){return d.job_ref===ref&&d.status!=='Superseded';});
   if(!jd.length)return {state:'none',total:0,approved:0,oldest:0};
-  var appr=jd.filter(function(d){return d.status==='Approved';}).length;
+  var appr=jd.filter(function(d){return DRW_PASSED.indexOf(d.status)>=0;}).length;
   var oldest=0;
   jd.forEach(function(d){if(d.status==='Issued to client'){var a=drwAge(d.issued_date);if(a>oldest)oldest=a;}});
   return {state:appr===jd.length?'approved':'pending',total:jd.length,approved:appr,oldest:oldest};
@@ -3444,7 +3446,8 @@ function rDrawings(){
   var active=drws.filter(function(d){return d.status!=='Superseded';});
   var inProg=active.filter(function(d){return d.status==='In progress'||d.status==='Internal check';}).length;
   var issued=active.filter(function(d){return d.status==='Issued to client';});
-  var appr=active.filter(function(d){return d.status==='Approved';}).length;
+  var appr=active.filter(function(d){return DRW_PASSED.indexOf(d.status)>=0;}).length;
+  var drawn=active.filter(function(d){return d.status==='Complete';}).length;
   var overdue=issued.filter(function(d){return drwAge(d.issued_date)>=7;}).length;
 
   // Blocked jobs: open orders with drawings not all approved
@@ -3458,12 +3461,13 @@ function rDrawings(){
   var byPerson={};
   active.forEach(function(d){
     var p=d.draughtsman||'Unassigned';
-    if(!byPerson[p])byPerson[p]={p:p,prog:0,chk:0,iss:0,appr:0,tot:0};
+    if(!byPerson[p])byPerson[p]={p:p,prog:0,chk:0,done:0,iss:0,appr:0,tot:0};
     byPerson[p].tot++;
     if(d.status==='In progress')byPerson[p].prog++;
     else if(d.status==='Internal check')byPerson[p].chk++;
     else if(d.status==='Issued to client')byPerson[p].iss++;
-    else if(d.status==='Approved')byPerson[p].appr++;
+    else if(d.status==='Complete')byPerson[p].done=(byPerson[p].done||0)+1;
+    else if(DRW_PASSED.indexOf(d.status)>=0)byPerson[p].appr++;
   });
   var people=Object.keys(byPerson).map(function(k){return byPerson[k];});
 
@@ -3471,12 +3475,13 @@ function rDrawings(){
   +'<div class="kpi cn"><div class="kpi-l">Active drawings</div><div class="kpi-v">'+active.length+'</div></div>'
   +'<div class="kpi cb"><div class="kpi-l">On the board</div><div class="kpi-v">'+inProg+'</div><div class="kpi-s">In progress or checking</div></div>'
   +'<div class="kpi '+(overdue>0?'cr':'ca')+'"><div class="kpi-l">Awaiting client</div><div class="kpi-v">'+issued.length+'</div><div class="kpi-s">'+(overdue>0?overdue+' over 7 days':'All within 7 days')+'</div></div>'
-  +'<div class="kpi cg"><div class="kpi-l">Approved</div><div class="kpi-v">'+appr+'</div></div>'
+  +'<div class="kpi cb"><div class="kpi-l">Drawn &amp; complete</div><div class="kpi-v">'+drawn+'</div><div class="kpi-s">Ready to issue</div></div>'
+  +'<div class="kpi cg"><div class="kpi-l">Approved / released</div><div class="kpi-v">'+appr+'</div></div>'
   +'<div class="kpi '+(blocked.length>0?'cr':'cg')+'"><div class="kpi-l">Jobs blocked</div><div class="kpi-v">'+blocked.length+'</div><div class="kpi-s">'+R(blockedVal)+' held up</div></div>'
   +'</div>'
   // Workload
-  +(people.length?'<div class="card"><div class="card-hd"><h3>Draughtsman workload</h3></div><div class="tw"><table><thead><tr><th>Draughtsman</th><th style="text-align:center">In progress</th><th style="text-align:center">Internal check</th><th style="text-align:center">With client</th><th style="text-align:center">Approved</th><th style="text-align:center">Total</th></tr></thead><tbody>'
-  +people.map(function(p){return '<tr><td style="font-weight:500">'+p.p+'</td><td style="text-align:center;font-family:monospace;color:#1e3a5f;font-weight:600">'+(p.prog||'—')+'</td><td style="text-align:center;font-family:monospace;color:#44337a">'+(p.chk||'—')+'</td><td style="text-align:center;font-family:monospace;color:#92400e">'+(p.iss||'—')+'</td><td style="text-align:center;font-family:monospace;color:#276749">'+(p.appr||'—')+'</td><td style="text-align:center;font-family:monospace;font-weight:700">'+p.tot+'</td></tr>';}).join('')
+  +(people.length?'<div class="card"><div class="card-hd"><h3>Draughtsman workload</h3></div><div class="tw"><table><thead><tr><th>Draughtsman</th><th style="text-align:center">In progress</th><th style="text-align:center">Internal check</th><th style="text-align:center">Complete</th><th style="text-align:center">With client</th><th style="text-align:center">Approved</th><th style="text-align:center">Total</th></tr></thead><tbody>'
+  +people.map(function(p){return '<tr><td style="font-weight:500">'+p.p+'</td><td style="text-align:center;font-family:monospace;color:#1e3a5f;font-weight:600">'+(p.prog||'—')+'</td><td style="text-align:center;font-family:monospace;color:#44337a">'+(p.chk||'—')+'</td><td style="text-align:center;font-family:monospace;color:#234e52">'+(p.done||'—')+'</td><td style="text-align:center;font-family:monospace;color:#92400e">'+(p.iss||'—')+'</td><td style="text-align:center;font-family:monospace;color:#276749">'+(p.appr||'—')+'</td><td style="text-align:center;font-family:monospace;font-weight:700">'+p.tot+'</td></tr>';}).join('')
   +'</tbody></table></div></div>':'')
   // Blocked jobs alert
   +(blocked.length?'<div class="card"><div class="card-hd" style="background:#fff5f5;border-bottom:2px solid #fed7d7"><h3 style="color:#9b1c1c">&#9888; Jobs blocked &mdash; drawings not approved</h3></div><div class="tw"><table><thead><tr><th>Job #</th><th>Client</th><th>BU</th><th>Value</th><th>Due</th><th>Drawings</th></tr></thead><tbody>'
@@ -3573,7 +3578,7 @@ function drwToggleDates(){
   var st=gv('dSt');
   var box=document.getElementById('dDateBox');
   if(!box)return;
-  box.style.display=(st==='Issued to client'||st==='Approved'||st==='Superseded')?'grid':'none';
+  box.style.display=(st==='Issued to client'||st==='Approved'||st==='Issued for Procurement'||st==='Superseded')?'grid':'none';
   if(st==='Issued to client'){var i=document.getElementById('dIss');if(i&&!i.value)i.value=td();}
   if(st==='Approved'){var a=document.getElementById('dAppr');if(a&&!a.value)a.value=td();}
 }
