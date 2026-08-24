@@ -117,7 +117,7 @@ function sla(due,status){
   return '<span class="sla-ok">'+d+'d left</span>';
 }
 function lbadge(s){var m={Lead:'b-lead',Quoted:'b-quoted',Won:'b-won',Lost:'b-lost',Moved:'b-inv'};return '<span class="badge '+(m[s]||'b-lead')+'">'+s+'</span>';}
-function obadge(s){var m={Open:'b-open','In progress':'b-prog',Completed:'b-done'};return '<span class="badge '+(m[s]||'b-open')+'">'+s+'</span>';}
+function obadge(s){var m={Open:'b-open','In progress':'b-prog',Completed:'b-done',Cancelled:'b-lost','On hold':'b-inv'};return '<span class="badge '+(m[s]||'b-open')+'">'+s+'</span>';}
 
 var _tt;
 function toast(msg,type){
@@ -198,7 +198,7 @@ function rDash(){
   var quotedLeads=leads.filter(function(l){return l.status==='Quoted';}).length;
   var activeLeadPool=outstandingLeads+quotedLeads;
   var notQuotedPct=activeLeadPool>0?Math.round(outstandingLeads/activeLeadPool*100):0;
-  var openOrds=orders.filter(function(o){return !o.invoiced&&o.status!=='Completed';});
+  var openOrds=orders.filter(function(o){return !o.invoiced&&o.status!=='Completed'&&o.status!=='Cancelled';});
   var openV=openOrds.reduce(function(s,o){return s+(+o.order_val||0);},0);
   var lateO=openOrds.filter(function(o){return o.due<td();}).length;
   var lateQ=leads.filter(function(l){return l.status==='Lead'&&l.quote_due<td();}).length;
@@ -302,13 +302,135 @@ function fLeads(){
 }
 
 function rOrders(){
-  var open=orders.filter(function(o){return !o.invoiced;});
+  var open=orders.filter(function(o){return !o.invoiced&&o.status!=='Cancelled';});
   var openV=open.reduce(function(s,o){return s+(+o.order_val||0);},0);
   var late=open.filter(function(o){return o.due<td();}).length;
-  return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Open orders</div><div class="kpi-v">'+open.length+'</div></div><div class="kpi cgo"><div class="kpi-l">Order book value</div><div class="kpi-v">'+R(openV)+'</div></div><div class="kpi '+(late>0?'cr':'cg')+'"><div class="kpi-l">Overdue</div><div class="kpi-v">'+late+'</div><div class="kpi-s">Past due date</div></div><div class="kpi cg"><div class="kpi-l">Completed</div><div class="kpi-v">'+orders.filter(function(o){return o.status==='Completed';}).length+'</div></div></div>'
+  return '<div class="kpis"><div class="kpi cn"><div class="kpi-l">Open orders</div><div class="kpi-v">'+open.length+'</div></div><div class="kpi cgo"><div class="kpi-l">Order book value</div><div class="kpi-v">'+R(openV)+'</div></div><div class="kpi '+(late>0?'cr':'cg')+'"><div class="kpi-l">Overdue</div><div class="kpi-v">'+late+'</div><div class="kpi-s">Past due date</div></div><div class="kpi cg"><div class="kpi-l">Completed</div><div class="kpi-v">'+orders.filter(function(o){return o.status==='Completed';}).length+'</div></div>'
+  +(function(){var cn=orders.filter(function(o){return o.status==='Cancelled';});if(!cn.length)return '';var cv=cn.reduce(function(s,o){return s+(+o.order_val||0);},0);return '<div class="kpi cr"><div class="kpi-l">Cancelled</div><div class="kpi-v">'+cn.length+'</div><div class="kpi-s">'+R(cv)+' lost</div></div>';})()
+  +'</div>'
   +'<div class="card"><div class="card-hd"><h3>Order book register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addOrderBtn">+ Add order</button><button class="btn btn-sm" id="addSubJobBtn" style="background:#f0fff4;color:#276749;border-color:#c6f6d5">+ Add sub-job</button><button class="btn btn-e" id="expOrdersBtn">&#8595; Excel</button></div></div>'
-  +'<div class="toolbar"><input type="text" id="os" placeholder="Search..."><select id="obu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="ost"><option value="">All statuses</option><option>Open</option><option>In progress</option><option>Completed</option></select></div>'
+  +'<div class="toolbar"><input type="text" id="os" placeholder="Search..."><select id="obu"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><select id="ost"><option value="">All active</option><option>Open</option><option>In progress</option><option>On hold</option><option>Completed</option><option>Cancelled</option></select></div>'
   +'<div class="tw"><table><thead><tr><th>Job #</th><th>Client</th><th>Client PO #</th><th>BU</th><th>Value</th><th>Due</th><th>SLA</th><th style="text-align:center">Drawings</th><th style="text-align:center">Mat %</th><th style="text-align:center">Lab %</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead><tbody id="otb"><tr><td colspan="13" class="empty">Loading...</td></tr></tbody></table></div></div>';
+}
+
+// ── CANCEL ORDER / RETURN TO QUOTING ─────────────────────────────────────────
+function orderLinks(ref){
+  var pos=spos.filter(function(p){return p.job_ref===ref;});
+  var jw=wis.filter(function(w){return w.job_ref===ref;});
+  var dw=drws.filter(function(d){return d.job_ref===ref;});
+  var pl=planr.filter(function(p){return p.job_ref===ref;});
+  var subs=orders.filter(function(o){return o.master_ref===ref;});
+  var matSpent=pos.reduce(function(s,p){return s+(+p.amount||0);},0);
+  var labHrs=0;
+  jw.forEach(function(w){
+    var ld=w.labour_data?JSON.parse(w.labour_data):[];
+    ld.forEach(function(e){labHrs+=(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);});
+  });
+  return {pos:pos,wis:jw,drws:dw,planr:pl,subs:subs,matSpent:Math.round(matSpent),labHrs:labHrs,
+          any:pos.length+jw.length+dw.length+pl.length+subs.length};
+}
+
+function linkSummary(L){
+  var bits=[];
+  if(L.pos.length)bits.push(L.pos.length+' supplier PO'+(L.pos.length!==1?'s':'')+' &mdash; '+R(L.matSpent));
+  if(L.wis.length)bits.push(L.wis.length+' work instruction'+(L.wis.length!==1?'s':'')+' &mdash; '+L.labHrs+' hrs');
+  if(L.drws.length)bits.push(L.drws.length+' drawing'+(L.drws.length!==1?'s':''));
+  if(L.planr.length)bits.push('on the planner');
+  if(L.subs.length)bits.push(L.subs.length+' sub-job'+(L.subs.length!==1?'s':''));
+  return bits;
+}
+
+function oCancelOrder(id){
+  var o=null;for(var i=0;i<orders.length;i++){if(orders[i].id===id){o=orders[i];break;}}
+  if(!o)return;
+  var L=orderLinks(o.ref);
+  var bits=linkSummary(L);
+  var isCancelled=o.status==='Cancelled';
+
+  if(isCancelled){
+    openM('<div class="mtitle">Reinstate order &mdash; '+o.ref+'</div>'
+    +'<div style="background:#f4f6f9;border-radius:6px;padding:10px 13px;font-size:12px;margin-bottom:13px">'+o.client+' &nbsp;|&nbsp; '+o.bu+' &nbsp;|&nbsp; '+R(+o.order_val||0)+'</div>'
+    +'<p style="font-size:12px;color:#718096;margin-bottom:13px">This will put '+o.ref+' back into the live order book. Any linked POs, WIs and drawings are untouched.</p>'
+    +'<div class="mfr"><label>Reinstate with status</label><select id="coStatus"><option>Open</option><option>In progress</option><option>On hold</option></select></div>'
+    +'<div class="mfoot"><button class="btn" id="coCancel">Close</button><button class="btn btn-p" id="coDo">Reinstate order</button></div>');
+    document.getElementById('coCancel').addEventListener('click',closeM);
+    document.getElementById('coDo').addEventListener('click',function(){
+      dbPatch('orders','id=eq.'+id,{status:gv('coStatus'),cancel_reason:'',cancelled_date:null})
+      .then(function(){closeM();return loadAll();}).then(function(){go('orders');toast(o.ref+' reinstated','s');}).catch(function(e){toast(e.message,'e');});
+    });
+    return;
+  }
+
+  openM('<div class="mtitle">Cancel order &mdash; '+o.ref+'</div>'
+  +'<div style="background:#f4f6f9;border-radius:6px;padding:10px 13px;font-size:12px;margin-bottom:13px">'+o.client+' &nbsp;|&nbsp; '+o.bu+' &nbsp;|&nbsp; '+R(+o.order_val||0)+(o.client_po?' &nbsp;|&nbsp; PO '+o.client_po:'')+'</div>'
+  +(bits.length?'<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:10px 13px;font-size:11px;color:#92400e;margin-bottom:13px"><strong>&#9888; This job already has activity against it</strong><div style="margin-top:5px;line-height:1.7">'+bits.join('<br>')+'</div><div style="margin-top:6px">Cancelling keeps all of it for the record. Costs already incurred stay visible in Job Costing.</div></div>':'')
+  +'<div class="mfr"><label>Reason for cancellation</label><select id="coReasonSel" onchange="coToggleOther()"><option>Client cancelled</option><option>Client postponed indefinitely</option><option>Lost to competitor</option><option>Scope withdrawn</option><option>Raised in error</option><option value="Other">Other &mdash; specify</option></select></div>'
+  +'<div class="mfr" id="coOtherBox" style="display:none"><label>Specify reason</label><input id="coOther" placeholder="Reason"></div>'
+  +'<div class="mfr"><label>Date cancelled</label><input type="date" id="coDate" value="'+td()+'"></div>'
+  +'<div style="background:#ebf4ff;border:1px solid #bee3f8;border-radius:6px;padding:9px 12px;font-size:11px;color:#1e3a5f;margin-bottom:11px">The order stays in the system marked Cancelled. It drops out of the order book value, overdue counts and dashboard figures, but nothing is deleted.</div>'
+  +'<div class="mfoot"><button class="btn" id="coCancel">Keep order</button><button class="btn btn-del" id="coDo">Cancel this order</button></div>');
+
+  document.getElementById('coCancel').addEventListener('click',closeM);
+  document.getElementById('coDo').addEventListener('click',function(){
+    var sel=gv('coReasonSel');
+    var reason=sel==='Other'?(gv('coOther')||'Other'):sel;
+    dbPatch('orders','id=eq.'+id,{status:'Cancelled',cancel_reason:reason,cancelled_date:fmtD(gv('coDate'))})
+    .then(function(){closeM();return loadAll();}).then(function(){go('orders');toast(o.ref+' cancelled','s');}).catch(function(e){toast(e.message,'e');});
+  });
+}
+
+function coToggleOther(){
+  var b=document.getElementById('coOtherBox');
+  if(b)b.style.display=gv('coReasonSel')==='Other'?'block':'none';
+}
+
+function oReturnToQuote(id){
+  var o=null;for(var i=0;i<orders.length;i++){if(orders[i].id===id){o=orders[i];break;}}
+  if(!o)return;
+  if(o.master_ref){toast('Sub-jobs cannot be returned to quoting — delete the sub-job instead','e');return;}
+  var L=orderLinks(o.ref);
+  var bits=linkSummary(L);
+
+  // Is there a matching lead to restore?
+  var lead=null;
+  for(var j=0;j<leads.length;j++){
+    if(leads[j].ref&&leads[j].ref.trim().toLowerCase()===String(o.ref).trim().toLowerCase()){lead=leads[j];break;}
+  }
+
+  openM('<div class="mtitle">Return to quoting &mdash; '+o.ref+'</div>'
+  +'<div style="background:#f4f6f9;border-radius:6px;padding:10px 13px;font-size:12px;margin-bottom:13px">'+o.client+' &nbsp;|&nbsp; '+o.bu+' &nbsp;|&nbsp; '+R(+o.order_val||0)+'</div>'
+  +'<p style="font-size:12px;color:#718096;margin-bottom:12px">This moves '+o.ref+' out of the Order Book and back into New Business so it can be re-quoted. The MM number stays the same.</p>'
+  +(L.subs.length?'<div style="background:#fff5f5;border:1px solid #fed7d7;border-radius:6px;padding:10px 13px;font-size:11px;color:#9b1c1c;margin-bottom:13px"><strong>&#9888; This job has '+L.subs.length+' sub-job'+(L.subs.length!==1?'s':'')+'</strong><div style="margin-top:4px">Remove the sub-jobs first, or cancel the order instead.</div></div>':'')
+  +(bits.length&&!L.subs.length?'<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:10px 13px;font-size:11px;color:#92400e;margin-bottom:13px"><strong>&#9888; Work has already been booked against this job</strong><div style="margin-top:5px;line-height:1.7">'+bits.join('<br>')+'</div><div style="margin-top:6px">These records stay linked to '+o.ref+' but will have no order behind them. If real cost has been incurred, <strong>cancel the order instead</strong> so the history stays intact.</div></div>':'')
+  +'<div class="mfr"><label>Return with lead status</label><select id="rqStatus"><option value="Quoted">Quoted &mdash; awaiting client decision</option><option value="Lead">Lead &mdash; needs re-quoting</option></select></div>'
+  +'<div class="mfr"><label>Note (optional)</label><input id="rqNote" placeholder="e.g. Client revised scope, re-quote required"></div>'
+  +'<div style="font-size:11px;color:#718096;margin-bottom:11px">'+(lead?'The original lead record will be restored.':'A new lead will be created from this order\\u2019s details.')+'</div>'
+  +'<div class="mfoot"><button class="btn" id="rqCancel">Cancel</button><button class="btn btn-p" id="rqDo"'+(L.subs.length?' disabled style="opacity:.4;cursor:not-allowed"':'')+'>Return to New Business</button></div>');
+
+  document.getElementById('rqCancel').addEventListener('click',closeM);
+  if(L.subs.length)return;
+
+  document.getElementById('rqDo').addEventListener('click',function(){
+    var st=gv('rqStatus');
+    var note=gv('rqNote');
+    var p;
+    if(lead){
+      var ln=(lead.notes||'');
+      if(note)ln=(ln?ln+' | ':'')+'Returned from Order Book '+td()+': '+note;
+      p=dbPatch('leads','id=eq.'+lead.id,{status:st,notes:ln,quote_val:+o.order_val||0});
+    }else{
+      p=dbPost('leads',{ref:o.ref,client:o.client,bu:o.bu,type:o.type||'',contact:'',
+        received:o.received||td(),quote_due:td(),status:st,quote_val:+o.order_val||0,
+        notes:'Returned from Order Book '+td()+(note?': '+note:'')});
+    }
+    p.then(function(){
+      return dbDel('orders','id=eq.'+id);
+    }).then(function(){
+      closeM();return loadAll();
+    }).then(function(){
+      go('leads');toast(o.ref+' returned to New Business','s');
+    }).catch(function(e){toast(e.message,'e');});
+  });
 }
 
 function orderRow(o,isSubJob){
@@ -318,9 +440,9 @@ function orderRow(o,isSubJob){
   var noBudget=(!o.mat_budget||+o.mat_budget===0)&&(!o.lab_budget||+o.lab_budget===0);
   var noBadge='<span style="background:#f4f6f9;color:#a0aec0;border:1px solid #e2e8f0;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600">No budget</span>';
   function pBadge(p){if(noBudget)return noBadge;if(p<0)return '<span style="color:#a0aec0;font-size:11px">—</span>';return p>=100?'<span style="color:#c53030;font-weight:700;font-size:11px">'+p+'%</span>':p>=85?'<span style="color:#d97706;font-weight:700;font-size:11px">'+p+'%</span>':'<span style="color:#276749;font-size:11px">'+p+'%</span>';}
-  var subStyle=isSubJob?'background:#f8fafc;':'';
+  var subStyle=(isSubJob?'background:#f8fafc;':'')+(o.status==='Cancelled'?'opacity:.55;':'');
   var refDisplay=isSubJob?'<span style="color:#a0aec0;margin-right:3px">&#8627;</span><button class="btn-g" style="font-family:monospace;font-size:11px;font-weight:600;color:#4a6741;padding:2px 4px" data-id="'+o.id+'" data-action="showJobCost">'+o.ref+'</button>':'<button class="btn-g" style="font-family:monospace;font-size:11px;font-weight:600;color:var(--navy);padding:2px 4px" data-id="'+o.id+'" data-action="showJobCost">'+o.ref+'</button>';
-  return '<tr style="'+subStyle+'"><td class="mono">'+refDisplay+'</td><td>'+(isSubJob?'<span style="color:#718096;font-size:11px">'+o.client+'</span>':o.client)+'</td><td class="mono" style="font-size:11px">'+(o.client_po||'—')+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+jobDrwPill(o.ref)+'</td><td style="text-align:center">'+pBadge(cp.matPct)+'</td><td style="text-align:center">'+pBadge(cp.labPct)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(o.notes||'—')+'</td><td style="white-space:nowrap">'+finBtn+'<button class="btn-g" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
+  return '<tr style="'+subStyle+'"><td class="mono">'+refDisplay+'</td><td>'+(isSubJob?'<span style="color:#718096;font-size:11px">'+o.client+'</span>':o.client)+'</td><td class="mono" style="font-size:11px">'+(o.client_po||'—')+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+jobDrwPill(o.ref)+'</td><td style="text-align:center">'+pBadge(cp.matPct)+'</td><td style="text-align:center">'+pBadge(cp.labPct)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+((o.status==='Cancelled'&&o.cancel_reason)?o.cancel_reason:(o.notes||''))+'">'+((o.status==='Cancelled'&&o.cancel_reason)?'<span style="color:#9b1c1c">'+o.cancel_reason+'</span>':(o.notes||'—'))+'</td><td style="white-space:nowrap">'+finBtn+(o.status==='Cancelled'?'<button class="btn-g" style="padding:2px 3px;color:#276749;font-weight:700" data-id="'+o.id+'" data-action="cancelOrder" title="Reinstate order">&#8635;</button>':'<button class="btn-g" style="padding:2px 3px" data-id="'+o.id+'" data-action="cancelOrder" title="Cancel order">&#8856;</button>'+(isSubJob?'':'<button class="btn-g" style="padding:2px 3px" data-id="'+o.id+'" data-action="returnQuote" title="Return to quoting">&#8617;</button>'))+'<button class="btn-g" style="padding:2px 3px" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" style="padding:2px 3px" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
 }
 
 function fOrders(){
@@ -328,6 +450,7 @@ function fOrders(){
   var bu=gv('obu'),st=gv('ost');
   var f=orders.filter(function(o){
     if(o.invoiced)return false;
+    if(o.status==='Cancelled'&&st!=='Cancelled')return false;
     if(cUser&&cUser.role==='HOD'&&o.bu!==cUser.bu&&(!cUser.bu2||o.bu!==cUser.bu2))return false;
     if(s&&(o.client+o.ref+o.bu+(o.master_ref||'')).toLowerCase().indexOf(s)<0)return false;
     if(bu&&o.bu!==bu)return false;
@@ -554,7 +677,7 @@ function oOrder(id){
   +'<div class="f2"><div class="mfr"><label>Job number</label><input id="mOr" value="'+(o.ref||nr)+'"></div><div class="mfr"><label>Business unit</label>'+buS('mOb',o.bu)+'</div></div>'
   +'<div class="f2"><div class="mfr"><label>Client</label><input id="mOc" value="'+(o.client||'')+'"></div><div class="mfr"><label>Client PO number</label><input id="mOcpo" value="'+(o.client_po||'')+'"></div></div>'
   +'<div class="mfr"><label>Work type</label><input id="mOt" value="'+(o.type||'')+'"></div>'
-  +'<div class="f2"><div class="mfr"><label>Order value (R)</label><input type="number" id="mOv" value="'+(o.order_val||0)+'"></div><div class="mfr"><label>Status</label><select id="mOs">'+['Open','In progress','Completed'].map(function(s){return '<option'+(o.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Order value (R)</label><input type="number" id="mOv" value="'+(o.order_val||0)+'"></div><div class="mfr"><label>Status</label><select id="mOs">'+['Open','In progress','On hold','Completed','Cancelled'].map(function(s){return '<option'+(o.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div></div>'
   +'<div style="background:#f4f6f9;border-radius:8px;padding:12px;margin-bottom:11px"><div style="font-size:10px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Quote Budget Split</div><div class="f2"><div class="mfr"><label>Material budget (R)</label><input type="number" id="mOmb" value="'+(o.mat_budget||0)+'"></div><div class="mfr"><label>Labour budget (R)</label><input type="number" id="mOlb" value="'+(o.lab_budget||0)+'"></div></div></div>'
   +'<div class="f2"><div class="mfr"><label>Date received</label><input type="date" id="mOrec" value="'+(o.received||td())+'"></div><div class="mfr"><label>Due date</label><input type="date" id="mOd" value="'+(o.due||'')+'"></div></div>'
   +'<div class="mfr"><label>Notes</label><textarea id="mOn">'+(o.notes||'')+'</textarea></div>'
@@ -742,7 +865,7 @@ function expLeads(){
 }
 function expOrders(){
   var bu=gv('obu'),st=gv('ost');
-  var f=orders.filter(function(o){return !o.invoiced&&(!bu||o.bu===bu)&&(!st||o.status===st);});
+  var f=orders.filter(function(o){return !o.invoiced&&(o.status!=='Cancelled'||st==='Cancelled')&&(!bu||o.bu===bu)&&(!st||o.status===st);});
   xlx(f.map(function(o){return {a:o.ref,b:o.client,c:o.bu,d:o.type,e:+o.order_val||0,f:fd(o.received),g:fd(o.due),h:o.status,i:o.invoiced?'Yes':'No',j:o.notes};}),
   [{k:'a',l:'Job #',w:10},{k:'b',l:'Client',w:22},{k:'c',l:'BU',w:18},{k:'d',l:'Type',w:16},{k:'e',l:'Value',w:14},{k:'f',l:'Received',w:13},{k:'g',l:'Due',w:12},{k:'h',l:'Status',w:12},{k:'i',l:'Invoiced',w:9},{k:'j',l:'Notes',w:30}],
   'MM_Orders.xlsx','Order Book');
@@ -1416,7 +1539,7 @@ function checkWIBUMatch(){
 
 // ── JOB COSTING (LIVE) ───────────────────────────────────────────────────────
 function rJobCosting(){
-  var openOrds=orders.filter(function(o){return !o.invoiced;});
+  var openOrds=orders.filter(function(o){return !o.invoiced&&o.status!=='Cancelled';});
   return '<div class="card"><div class="card-hd"><h3>Live job costing — select MM Number</h3></div>'
   +'<div class="toolbar"><select id="jcostMM" onchange="loadJobCost()" style="min-width:200px"><option value="">Select MM Number...</option>'+openOrds.map(function(o){return '<option value="'+o.id+'">'+o.ref+' — '+o.client+'</option>';}).join('')+'</select></div>'
   +'<div id="jcostBody" style="padding:17px"><div class="empty">Select an MM Number above to view live job costing</div></div>'
@@ -1756,7 +1879,7 @@ function oSubJob(masterId){
   var master=null;
   if(masterId){for(var i=0;i<orders.length;i++){if(orders[i].id===masterId){master=orders[i];break;}}}
   // Build master options
-  var masterOrds=orders.filter(function(o){return !o.invoiced&&!o.master_ref;});
+  var masterOrds=orders.filter(function(o){return !o.invoiced&&o.status!=='Cancelled'&&!o.master_ref;});
   var masterOpts=masterOrds.map(function(o){return '<option value="'+o.ref+'"'+(master&&master.ref===o.ref?' selected':'')+'>'+o.ref+' — '+o.client+'</option>';}).join('');
 
   openM('<div class="mtitle">Add Sub-job</div>'
@@ -3202,7 +3325,7 @@ function renderPlanner(){
 
 function oPlannerAdd(){
   var onPlanner=planr.map(function(p){return p.job_ref;});
-  var avail=orders.filter(function(o){return !o.invoiced&&o.status!=='Completed'&&onPlanner.indexOf(o.ref)<0;});
+  var avail=orders.filter(function(o){return !o.invoiced&&o.status!=='Completed'&&o.status!=='Cancelled'&&onPlanner.indexOf(o.ref)<0;});
   if(cUser&&cUser.role==='HOD')avail=avail.filter(function(o){return o.bu===cUser.bu||(cUser.bu2&&o.bu===cUser.bu2);});
   if(!avail.length){toast('No unscheduled open jobs available','i');return;}
   var opts=avail.map(function(o){return '<option value="'+o.ref+'">'+o.ref+' — '+o.client+' ('+o.bu+')</option>';}).join('');
@@ -3397,7 +3520,7 @@ function rDrwRows(){
 
 function oDrw(id){
   var d=id?(function(){for(var i=0;i<drws.length;i++){if(drws[i].id===id)return drws[i];}return null;})():null;
-  var openOrds=orders.filter(function(o){return !o.invoiced;});
+  var openOrds=orders.filter(function(o){return !o.invoiced&&o.status!=='Cancelled';});
   var openLeads=leads.filter(function(l){return l.status==='Lead'||l.status==='Quoted';});
   var ordOpts=openOrds.map(function(o){return '<option value="'+o.ref+'"'+(d&&d.job_ref===o.ref?' selected':'')+'>'+o.ref+' — '+o.client+'</option>';}).join('');
   var leadOpts=openLeads.map(function(l){return '<option value="'+l.ref+'"'+(d&&d.lead_ref===l.ref?' selected':'')+'>'+l.ref+' — '+l.client+'</option>';}).join('');
@@ -3491,6 +3614,8 @@ document.addEventListener('click',function(e){
   if(action==='toFinance')toFinance(id);
   if(action==='editLead')oLead(id);
   if(action==='delLead')cfm('Delete lead','Permanently delete this lead?',function(){dbDel('leads','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('leads');toast('Deleted','s');});});
+  if(action==='cancelOrder'){oCancelOrder(id);return;}
+  if(action==='returnQuote'){oReturnToQuote(id);return;}
   if(action==='editOrder')oOrder(id);
   if(action==='delOrder')cfm('Delete order','Permanently delete this order?',function(){dbDel('orders','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('orders');toast('Deleted','s');});});
   if(action==='togSPO'){var p=null;for(var i=0;i<spos.length;i++){if(spos[i].id===id){p=spos[i];break;}}if(p)dbPatch('supplier_pos','id=eq.'+id,{received:!p.received}).then(function(){return loadAll();}).then(function(){go('buyer');toast('Updated','s');});}
@@ -3550,7 +3675,7 @@ document.addEventListener('input',function(e){
   if(el.id==='ds'){var dtb=document.getElementById('dtb');if(dtb)dtb.innerHTML=rDrwRows();}
 });
 
-function getOpenOrders(){return orders.filter(function(o){return !o.invoiced&&o.status!=='Completed';});}
+function getOpenOrders(){return orders.filter(function(o){return !o.invoiced&&o.status!=='Completed'&&o.status!=='Cancelled';});}
 function autoJCRef(jobRef){if(!jobRef)return 'JC-001';var existing=jcs.filter(function(j){return j.job_ref===jobRef;});return jobRef+'-JC'+String(existing.length+1).padStart(2,'0');}
 
 window.onload=function(){
