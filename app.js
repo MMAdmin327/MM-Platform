@@ -540,10 +540,12 @@ function fJCs(){
 // Compare an invoice against what the platform now holds
 function invVariance(i){
   var L=calcInvLive(i.job_ref);
-  var dMat=L.matSpent-(+i.mat_cost||0);
-  var dLab=L.labCost-(+i.labour_cost||0);
-  var tot=Math.abs(dMat)+Math.abs(dLab);
-  return {live:L,dMat:dMat,dLab:dLab,total:dMat+dLab,stale:tot>1};
+  var dMat=Math.round(L.matSpent-(+i.mat_cost||0));
+  var dLab=Math.round(L.labCost-(+i.labour_cost||0));
+  // Ignore sub-rand rounding noise
+  if(Math.abs(dMat)<1)dMat=0;
+  if(Math.abs(dLab)<1)dLab=0;
+  return {live:L,dMat:dMat,dLab:dLab,total:dMat+dLab,stale:(dMat!==0||dLab!==0)};
 }
 
 function rFin(){
