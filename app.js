@@ -117,6 +117,10 @@ function sla(due,status){
   return '<span class="sla-ok">'+d+'d left</span>';
 }
 function lbadge(s){var m={Lead:'b-lead',Quoted:'b-quoted',Won:'b-won',Lost:'b-lost',Moved:'b-inv'};return '<span class="badge '+(m[s]||'b-lead')+'">'+s+'</span>';}
+// Match job references tolerantly — trims spaces, ignores case
+function normRef(r){return String(r||'').trim().toUpperCase().replace(/\s+/g,'');}
+function sameRef(a,b){var x=normRef(a),y=normRef(b);return x!==''&&x===y;}
+
 function obadge(s){var m={Open:'b-open','In progress':'b-prog',Completed:'b-done',Cancelled:'b-lost','On hold':'b-inv'};return '<span class="badge '+(m[s]||'b-open')+'">'+s+'</span>';}
 
 var _tt;
@@ -140,9 +144,11 @@ function openM(html){
   document.body.appendChild(el);
 }
 function closeM(){var e=document.getElementById('mov');if(e)e.remove();}
-function cfm(title,msg,cb){
+function cfm(title,msg,cb,okLabel){
   var el=document.createElement('div');el.className='cov';el.id='cov';
-  el.innerHTML='<div class="cbox"><h4>'+title+'</h4><p>'+msg+'</p><div class="cbtns"><button class="btn" id="cfmNo">Cancel</button><button class="btn btn-del" id="cfmYes">Delete</button></div></div>';
+  var lbl=okLabel||'Delete';
+  var cls=okLabel?'btn-p':'btn-del';
+  el.innerHTML='<div class="cbox"><h4>'+title+'</h4><p>'+msg+'</p><div class="cbtns"><button class="btn" id="cfmNo">Cancel</button><button class="btn '+cls+'" id="cfmYes">'+lbl+'</button></div></div>';
   document.body.appendChild(el);
   document.getElementById('cfmNo').addEventListener('click',function(){el.remove();});
   document.getElementById('cfmYes').addEventListener('click',function(){el.remove();cb();});
@@ -165,15 +171,15 @@ function go(tab){
 }
 
 function getJobCostPct(ref,quoteVal){
-  var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===ref){ord=orders[i];break;}}
+  var ord=null;for(var i=0;i<orders.length;i++){if(sameRef(orders[i].ref,ref)){ord=orders[i];break;}}
   // If order value is 0 or missing, percentages are meaningless
   if(!quoteVal||quoteVal<=0)return {matPct:-1,labPct:-1,matSpent:0,labCost:0,matBudget:0,labBudget:0};
   var matBudget=ord&&+ord.mat_budget>0?+ord.mat_budget:0;
   var labBudget=ord&&+ord.lab_budget>0?+ord.lab_budget:0;
   // Materials from buyer sheet
-  var matSpent=spos.filter(function(p){return p.job_ref===ref;}).reduce(function(s,p){return s+(+p.amount||0);},0);
+  var matSpent=spos.filter(function(p){return sameRef(p.job_ref,ref);}).reduce(function(s,p){return s+(+p.amount||0);},0);
   // Labour from WIs
-  var jobWIs=wis.filter(function(w){return w.job_ref===ref;});
+  var jobWIs=wis.filter(function(w){return sameRef(w.job_ref,ref);});
   var labCost=0;
   jobWIs.forEach(function(w){
     var labData=w.labour_data?JSON.parse(w.labour_data):[];
@@ -315,11 +321,11 @@ function rOrders(){
 
 // ── CANCEL ORDER / RETURN TO QUOTING ─────────────────────────────────────────
 function orderLinks(ref){
-  var pos=spos.filter(function(p){return p.job_ref===ref;});
-  var jw=wis.filter(function(w){return w.job_ref===ref;});
-  var dw=drws.filter(function(d){return d.job_ref===ref;});
-  var pl=planr.filter(function(p){return p.job_ref===ref;});
-  var subs=orders.filter(function(o){return o.master_ref===ref;});
+  var pos=spos.filter(function(p){return sameRef(p.job_ref,ref);});
+  var jw=wis.filter(function(w){return sameRef(w.job_ref,ref);});
+  var dw=drws.filter(function(d){return sameRef(d.job_ref,ref);});
+  var pl=planr.filter(function(p){return sameRef(p.job_ref,ref);});
+  var subs=orders.filter(function(o){return sameRef(o.master_ref,ref);});
   var matSpent=pos.reduce(function(s,p){return s+(+p.amount||0);},0);
   var labHrs=0;
   jw.forEach(function(w){
@@ -531,15 +537,29 @@ function fJCs(){
   }).join('');
 }
 
+// Compare an invoice against what the platform now holds
+function invVariance(i){
+  var L=calcInvLive(i.job_ref);
+  var dMat=L.matSpent-(+i.mat_cost||0);
+  var dLab=L.labCost-(+i.labour_cost||0);
+  var tot=Math.abs(dMat)+Math.abs(dLab);
+  return {live:L,dMat:dMat,dLab:dLab,total:dMat+dLab,stale:tot>1};
+}
+
 function rFin(){
   var comp=orders.filter(function(o){return o.status==='Completed'&&!o.invoiced;});
   var invT=invs.reduce(function(s,i){return s+(+i.order_val||0);},0);
   var invC=invs.reduce(function(s,i){return s+(+i.mat_cost||0)+(+i.labour_cost||0)+(+i.overheads||0);},0);
   var prof=invT-invC;var mg=invT>0?Math.round(prof/invT*100):0;
-  return '<div class="kpis"><div class="kpi cgo"><div class="kpi-l">Total invoiced</div><div class="kpi-v">'+R(invT)+'</div></div><div class="kpi cn"><div class="kpi-l">Total cost</div><div class="kpi-v">'+R(invC)+'</div></div><div class="kpi '+(prof>0?'cg':'cr')+'"><div class="kpi-l">Gross profit</div><div class="kpi-v">'+R(prof)+'</div></div><div class="kpi '+(mg>20?'cg':mg>10?'ca':'cr')+'"><div class="kpi-l">Gross margin</div><div class="kpi-v">'+mg+'%</div></div><div class="kpi '+(comp.length>0?'ca':'cg')+'"><div class="kpi-l">Ready to invoice</div><div class="kpi-v">'+comp.length+'</div></div></div>'
+  var stale=invs.filter(function(i){return invVariance(i).stale;});
+  var staleAmt=stale.reduce(function(s,i){return s+invVariance(i).total;},0);
+  return '<div class="kpis"><div class="kpi cgo"><div class="kpi-l">Total invoiced</div><div class="kpi-v">'+R(invT)+'</div></div><div class="kpi cn"><div class="kpi-l">Total cost</div><div class="kpi-v">'+R(invC)+'</div></div><div class="kpi '+(prof>0?'cg':'cr')+'"><div class="kpi-l">Gross profit</div><div class="kpi-v">'+R(prof)+'</div></div><div class="kpi '+(mg>20?'cg':mg>10?'ca':'cr')+'"><div class="kpi-l">Gross margin</div><div class="kpi-v">'+mg+'%</div></div><div class="kpi '+(comp.length>0?'ca':'cg')+'"><div class="kpi-l">Ready to invoice</div><div class="kpi-v">'+comp.length+'</div></div>'
+  +(stale.length?'<div class="kpi cr"><div class="kpi-l">Costs changed</div><div class="kpi-v">'+stale.length+'</div><div class="kpi-s">'+(staleAmt>=0?'+':'')+R(staleAmt)+' not in invoice</div></div>':'')
+  +'</div>'
+  +(stale.length?'<div style="background:#fff5f5;border:1px solid #fed7d7;border-radius:var(--r);padding:11px 15px;margin-bottom:13px"><div style="font-size:12px;font-weight:600;color:#9b1c1c;margin-bottom:6px">&#9888; '+stale.length+' invoice'+(stale.length!==1?'s have':' has')+' costs booked after invoicing</div><div style="font-size:11px;color:#718096;margin-bottom:8px">Supplier POs or WI hours were added to these jobs after they moved to Finance. The invoice figures below are out of date.</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+stale.map(function(i){var v=invVariance(i);return '<button class="btn btn-sm" data-id="'+i.id+'" data-action="syncInv" title="Update to live figures">'+i.job_ref+' &nbsp;'+(v.total>=0?'+':'')+R(v.total)+'</button>';}).join('')+'<button class="btn btn-sm btn-p" data-action="syncAllInv">Update all</button></div></div>':'')
   +(comp.length>0?'<div class="alert-a">&#9888; '+comp.length+' completed order'+(comp.length>1?'s':'')+' ready — '+comp.map(function(o){return o.ref;}).join(', ')+'<div style="display:flex;gap:6px;flex-wrap:wrap">'+comp.map(function(o){return '<button class="btn btn-sm" data-id="'+o.id+'" data-action="toFinance">&rarr; Invoice '+o.ref+'</button>';}).join('')+'</div></div>':'')
   +'<div class="card"><div class="card-hd"><h3>Invoice register &amp; profitability</h3><div class="card-hd-r"><select id="fbu" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><button class="btn btn-e" id="expFinBtn">&#8595; Excel</button></div></div>'
-  +'<div class="tw"><table><thead><tr><th>Invoice ref</th><th>Job #</th><th>Client</th><th>BU</th><th>Value</th><th>Mat cost</th><th>Labour</th><th>OH</th><th>Profit</th><th>Margin</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+invs.map(function(i){var p=(+i.order_val||0)-(+i.mat_cost||0)-(+i.labour_cost||0)-(+i.overheads||0);var m=(+i.order_val||0)>0?Math.round(p/(+i.order_val||1)*100):0;return '<tr><td class="mono">'+i.inv_ref+'</td><td class="mono">'+i.job_ref+'</td><td>'+i.client+'</td><td><span class="badge b-bu">'+i.bu+'</span></td><td class="mono">'+R(+i.order_val)+'</td><td class="mono">'+R(+i.mat_cost)+'</td><td class="mono">'+R(+i.labour_cost)+'</td><td class="mono">'+R(+i.overheads)+'</td><td class="'+(p>0?'pp':'pn')+'">'+R(p)+'</td><td><span class="badge '+(m>20?'b-won':'b-lost')+'">'+m+'%</span></td><td class="mono">'+fd(i.invoiced_date)+'</td><td><span class="badge '+(i.status==='Paid'?'b-paid':'b-out')+'">'+i.status+'</span></td><td style="white-space:nowrap"><button class="btn-g" data-id="'+i.id+'" data-action="editInv">&#9998;</button> <button class="btn-d" data-id="'+i.id+'" data-action="delInv">&#10005;</button></td></tr>';}).join('')+(invs.length===0?'<tr><td colspan="13" class="empty">No invoices yet</td></tr>':'')+'</tbody></table></div></div>';
+  +'<div class="tw"><table><thead><tr><th>Invoice ref</th><th>Job #</th><th>Client</th><th>BU</th><th>Value</th><th>Mat cost</th><th>Labour</th><th>OH</th><th>Profit</th><th>Margin</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+invs.map(function(i){var p=(+i.order_val||0)-(+i.mat_cost||0)-(+i.labour_cost||0)-(+i.overheads||0);var m=(+i.order_val||0)>0?Math.round(p/(+i.order_val||1)*100):0;var vv=invVariance(i);return '<tr'+(vv.stale?' style="background:#fffbf9"':'')+'><td class="mono">'+i.inv_ref+'</td><td class="mono">'+i.job_ref+(vv.stale?' <span style="background:#fff5f5;color:#9b1c1c;border:1px solid #fed7d7;font-size:8px;font-weight:700;padding:1px 4px;border-radius:8px" title="Costs changed since invoicing">STALE</span>':'')+'</td><td>'+i.client+'</td><td><span class="badge b-bu">'+i.bu+'</span></td><td class="mono">'+R(+i.order_val)+'</td><td class="mono"'+(vv.dMat?' style="color:#c53030" title="Live: '+R(vv.live.matSpent)+'"':'')+'>'+R(+i.mat_cost)+(vv.dMat?' <span style="font-size:9px">('+(vv.dMat>0?'+':'')+R(vv.dMat)+')</span>':'')+'</td><td class="mono"'+(vv.dLab?' style="color:#c53030" title="Live: '+R(vv.live.labCost)+'"':'')+'>'+R(+i.labour_cost)+(vv.dLab?' <span style="font-size:9px">('+(vv.dLab>0?'+':'')+R(vv.dLab)+')</span>':'')+'</td><td class="mono">'+R(+i.overheads)+'</td><td class="'+(p>0?'pp':'pn')+'">'+R(p)+'</td><td><span class="badge '+(m>20?'b-won':'b-lost')+'">'+m+'%</span></td><td class="mono">'+fd(i.invoiced_date)+'</td><td><span class="badge '+(i.status==='Paid'?'b-paid':'b-out')+'">'+i.status+'</span></td><td style="white-space:nowrap">'+(vv.stale?'<button class="btn-g" style="padding:2px 3px;color:#c53030" data-id="'+i.id+'" data-action="syncInv" title="Update to live figures">&#8635;</button>':'')+'<button class="btn-g" style="padding:2px 3px" data-id="'+i.id+'" data-action="editInv">&#9998;</button><button class="btn-d" style="padding:2px 3px" data-id="'+i.id+'" data-action="delInv">&#10005;</button></td></tr>';}).join('')+(invs.length===0?'<tr><td colspan="13" class="empty">No invoices yet</td></tr>':'')+'</tbody></table></div></div>';
 }
 
 function wonToOrder(id){
@@ -576,10 +596,10 @@ function toFinance(id){
   var o=null;for(var i=0;i<orders.length;i++){if(orders[i].id===id){o=orders[i];break;}}
   if(!o)return;
   // Materials from Buyer Sheet
-  var linked=spos.filter(function(p){return p.job_ref===o.ref;});
+  var linked=spos.filter(function(p){return sameRef(p.job_ref,o.ref);});
   var matCost=linked.reduce(function(s,p){return s+(+p.amount||0);},0);
   // Labour from WI forms — per employee × their individual rate
-  var jobWIs=wis.filter(function(w){return w.job_ref===o.ref;});
+  var jobWIs=wis.filter(function(w){return sameRef(w.job_ref,o.ref);});
   var empTotals={};
   jobWIs.forEach(function(w){
     var labData=w.labour_data?JSON.parse(w.labour_data):[];
@@ -840,7 +860,7 @@ function oJC(editId){
   document.getElementById('saveJC').addEventListener('click',function(){
     var jobRef=gv('mJj');
     if(!jobRef){toast('Please select an open order','e');return;}
-    var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===jobRef){ord=orders[i];break;}}
+    var ord=null;for(var i=0;i<orders.length;i++){if(sameRef(orders[i].ref,jobRef)){ord=orders[i];break;}}
     var data={jcref:gv('mJr'),job_ref:jobRef,bu:ord?ord.bu:gv('mJb'),description:gv('mJd'),assigned:gv('mJa'),budget_hrs:+gv('mJbh')||0,actual_hrs:+gv('mJah')||0,mat_budget:+gv('mJmb')||0,mat_actual:+gv('mJma')||0,status:gv('mJs')};
     var pr=editId?dbPatch('job_cards','id=eq.'+editId,data):dbPost('job_cards',data);
     pr.then(function(){closeM();return loadAll();}).then(function(){go('jc');toast(editId?'Job card updated':'Job card saved','s');}).catch(function(e){toast(e.message,'e');});
@@ -849,7 +869,7 @@ function oJC(editId){
 
 function onJCOrderChange(){
   var jobRef=gv('mJj');
-  var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===jobRef){ord=orders[i];break;}}
+  var ord=null;for(var i=0;i<orders.length;i++){if(sameRef(orders[i].ref,jobRef)){ord=orders[i];break;}}
   if(ord){
     document.getElementById('mJb').value=ord.bu;
     document.getElementById('mJr').value=autoJCRef(jobRef);
@@ -885,8 +905,8 @@ function expJC(){
   'MM_JobCards.xlsx','Job Cards');
 }
 function calcInvLive(jobRef){
-  var matSpent=spos.filter(function(p){return p.job_ref===jobRef;}).reduce(function(s,p){return s+(+p.amount||0);},0);
-  var jobWIs=wis.filter(function(w){return w.job_ref===jobRef;});
+  var matSpent=spos.filter(function(p){return sameRef(p.job_ref,jobRef);}).reduce(function(s,p){return s+(+p.amount||0);},0);
+  var jobWIs=wis.filter(function(w){return sameRef(w.job_ref,jobRef);});
   var empTotals={},stTotals={};
   jobWIs.forEach(function(w){
     var labData=w.labour_data?JSON.parse(w.labour_data):[];
@@ -908,7 +928,7 @@ function calcInvLive(jobRef){
   var labHrs=0,labCost=0,stHrs=0,stCost=0;
   Object.keys(empTotals).forEach(function(n){labHrs+=empTotals[n];labCost+=empTotals[n]*rateOf(n);});
   Object.keys(stTotals).forEach(function(n){stHrs+=stTotals[n];stCost+=stTotals[n]*rateOf(n);});
-  return {matSpent:Math.round(matSpent),labHrs:labHrs,labCost:Math.round(labCost),stHrs:stHrs,stCost:Math.round(stCost),poCount:spos.filter(function(p){return p.job_ref===jobRef;}).length,wiCount:jobWIs.length};
+  return {matSpent:Math.round(matSpent),labHrs:labHrs,labCost:Math.round(labCost),stHrs:stHrs,stCost:Math.round(stCost),poCount:spos.filter(function(p){return sameRef(p.job_ref,jobRef);}).length,wiCount:jobWIs.length};
 }
 
 function oInv(id){
@@ -1088,7 +1108,7 @@ function oJCFull(editId){
     document.getElementById('saveJC').addEventListener('click',function(){
       var jobRef=gv('mJj');
       if(!jobRef){toast('Please select an order','e');return;}
-      var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===jobRef){ord=orders[i];break;}}
+      var ord=null;for(var i=0;i<orders.length;i++){if(sameRef(orders[i].ref,jobRef)){ord=orders[i];break;}}
       // Collect labour data
       var labArr=[];
       for(var i=0;i<10;i++){
@@ -1148,8 +1168,8 @@ function showJobCost(id){
   if(!o)return;
 
   // Calculate actuals
-  var matSpent=spos.filter(function(p){return p.job_ref===o.ref;}).reduce(function(s,p){return s+(+p.amount||0);},0);
-  var linkedJCs=jcs.filter(function(j){return j.job_ref===o.ref;});
+  var matSpent=spos.filter(function(p){return sameRef(p.job_ref,o.ref);}).reduce(function(s,p){return s+(+p.amount||0);},0);
+  var linkedJCs=jcs.filter(function(j){return sameRef(j.job_ref,o.ref);});
   var totalHrs=linkedJCs.reduce(function(s,j){return s+(+j.actual_hrs||0);},0);
   var buRate=BU_RATES[o.bu]||0;
   var labSpent=Math.round(totalHrs*buRate);
@@ -1216,7 +1236,7 @@ function showJobCost(id){
   +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Margin</div><div class="mono" style="font-size:15px;font-weight:700;color:'+(marginPct>=15?'#276749':marginPct>=0?'#d97706':'#c53030')+'">'+marginPct+'%</div></div>'
   +'</div></div>'
 
-  +'<div style="font-size:11px;color:#718096;margin-bottom:10px">📦 '+spos.filter(function(p){return p.job_ref===o.ref;}).length+' supplier POs on Buyer Sheet &nbsp;|&nbsp; 🔧 '+linkedJCs.length+' job card'+(linkedJCs.length!==1?'s':'')+' linked</div>'
+  +'<div style="font-size:11px;color:#718096;margin-bottom:10px">📦 '+spos.filter(function(p){return sameRef(p.job_ref,o.ref);}).length+' supplier POs on Buyer Sheet &nbsp;|&nbsp; 🔧 '+linkedJCs.length+' job card'+(linkedJCs.length!==1?'s':'')+' linked</div>'
   +'<div class="mfoot"><button class="btn" id="closeJobCost">Close</button>'+(o.status==='Completed'&&!o.invoiced?'<button class="btn btn-p" data-id="'+o.id+'" data-action="toFinance">&rarr; Move to Finance</button>':'')+'</div>');
 
   document.getElementById('closeJobCost').addEventListener('click',closeM);
@@ -1446,7 +1466,7 @@ function oWI(editId){
       if(!jobRef){toast('Please select an order, or choose No order yet','e');return;}
       var isNoOrder=jobRef==='NO_ORDER';
       if(isNoOrder&&!gv('wiWaybill')){toast('Please enter the waybill number','e');return;}
-      var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===jobRef){ord=orders[i];break;}}
+      var ord=null;for(var i=0;i<orders.length;i++){if(sameRef(orders[i].ref,jobRef)){ord=orders[i];break;}}
       // Collect labour data
       var labArr=[];
       var wiEmps=document.querySelectorAll('.wi-emp');
@@ -1513,7 +1533,7 @@ function onWIOrderChange(){
     return;
   }
   if(box)box.style.display='none';
-  var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===jobRef){ord=orders[i];break;}}
+  var ord=null;for(var i=0;i<orders.length;i++){if(sameRef(orders[i].ref,jobRef)){ord=orders[i];break;}}
   if(ord){
     if(buEl)buEl.value=ord.bu;
     var existing=wis.filter(function(x){return x.job_ref===jobRef;});
@@ -1528,7 +1548,7 @@ function checkWIBUMatch(){
   var note=document.getElementById('wiBUNote');
   if(!note)return;
   if(!jobRef||jobRef==='NO_ORDER'){note.style.display='none';return;}
-  var ord=null;for(var i=0;i<orders.length;i++){if(orders[i].ref===jobRef){ord=orders[i];break;}}
+  var ord=null;for(var i=0;i<orders.length;i++){if(sameRef(orders[i].ref,jobRef)){ord=orders[i];break;}}
   if(ord&&selBU&&selBU!==ord.bu){
     note.style.display='block';
     note.innerHTML='&#8505; Order <strong>'+jobRef+'</strong> sits under <strong>'+ord.bu+'</strong>, but this WI is assigned to <strong>'+selBU+'</strong>. Labour hours will be costed to '+selBU+' in the Labour Report.';
@@ -1539,9 +1559,13 @@ function checkWIBUMatch(){
 
 // ── JOB COSTING (LIVE) ───────────────────────────────────────────────────────
 function rJobCosting(){
-  var openOrds=orders.filter(function(o){return !o.invoiced&&o.status!=='Cancelled';});
+  var live=orders.filter(function(o){return !o.invoiced&&o.status!=='Cancelled';});
+  var closed=orders.filter(function(o){return o.invoiced||o.status==='Cancelled';});
   return '<div class="card"><div class="card-hd"><h3>Live job costing — select MM Number</h3></div>'
-  +'<div class="toolbar"><select id="jcostMM" onchange="loadJobCost()" style="min-width:200px"><option value="">Select MM Number...</option>'+openOrds.map(function(o){return '<option value="'+o.id+'">'+o.ref+' — '+o.client+'</option>';}).join('')+'</select></div>'
+  +'<div class="toolbar"><select id="jcostMM" onchange="loadJobCost()" style="min-width:240px"><option value="">Select MM Number...</option>'
+  +'<optgroup label="Active jobs">'+live.map(function(o){return '<option value="'+o.id+'">'+o.ref+' — '+o.client+'</option>';}).join('')+'</optgroup>'
+  +(closed.length?'<optgroup label="Invoiced / closed">'+closed.map(function(o){return '<option value="'+o.id+'">'+o.ref+' — '+o.client+(o.invoiced?' (invoiced)':' (cancelled)')+'</option>';}).join('')+'</optgroup>':'')
+  +'</select></div>'
   +'<div id="jcostBody" style="padding:17px"><div class="empty">Select an MM Number above to view live job costing</div></div>'
   +'</div>';
 }
@@ -1554,10 +1578,10 @@ function loadJobCost(){
   if(!o)return;
 
   // Materials from Buyer Sheet
-  var matSpent=spos.filter(function(p){return p.job_ref===o.ref;}).reduce(function(s,p){return s+(+p.amount||0);},0);
+  var matSpent=spos.filter(function(p){return sameRef(p.job_ref,o.ref);}).reduce(function(s,p){return s+(+p.amount||0);},0);
 
   // Labour from WI forms — per employee × their rate
-  var jobWIs=wis.filter(function(w){return w.job_ref===o.ref;});
+  var jobWIs=wis.filter(function(w){return sameRef(w.job_ref,o.ref);});
   var labCost=0;
   var labHrs=0;
   var labBreakdown=[];
@@ -1644,7 +1668,7 @@ function loadJobCost(){
   +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
   +'<span style="font-weight:700;font-size:13px">📦 Materials</span>'+tl(matPct)+'</div>'
   +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:12px">'
-  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Buyer Sheet Total</div><div class="mono" style="font-size:16px;font-weight:700">'+R(matSpent)+'</div><div style="font-size:10px;color:#718096">'+spos.filter(function(p){return p.job_ref===o.ref;}).length+' supplier POs</div></div>'
+  +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Buyer Sheet Total</div><div class="mono" style="font-size:16px;font-weight:700">'+R(matSpent)+'</div><div style="font-size:10px;color:#718096">'+spos.filter(function(p){return sameRef(p.job_ref,o.ref);}).length+' supplier POs</div></div>'
   +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">% of Quote</div><div class="mono" style="font-size:16px;font-weight:700">'+matPct+'%</div></div>'
   +'<div><div style="color:#718096;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:2px">Remaining</div><div class="mono" style="font-size:16px;font-weight:700">'+R(quoteVal-matSpent)+'</div></div>'
   +'</div></div>'
@@ -2738,10 +2762,10 @@ function pAdd(d,n){var x=new Date(d.getTime());x.setDate(x.getDate()+n);return x
 function pDiff(a,b){return Math.round((b-a)/86400000);}
 function pMonday(d){var x=new Date(d.getTime());var g=x.getDay();var diff=g===0?-6:1-g;x.setDate(x.getDate()+diff);return x;}
 
-function plannerOrder(ref){for(var i=0;i<orders.length;i++){if(orders[i].ref===ref)return orders[i];}return null;}
+function plannerOrder(ref){for(var i=0;i<orders.length;i++){if(sameRef(orders[i].ref,ref))return orders[i];}return null;}
 
 function plannerAutoPct(ref){
-  var jobWIs=wis.filter(function(w){return w.job_ref===ref;});
+  var jobWIs=wis.filter(function(w){return sameRef(w.job_ref,ref);});
   if(!jobWIs.length)return 0;
   var est=0,act=0;
   jobWIs.forEach(function(w){
@@ -3420,7 +3444,7 @@ function drwAge(d){if(!d)return 0;var a=pDate(d);if(!a)return 0;var t=new Date()
 
 // Drawing gate status for a job: none | pending | approved
 function jobDrwStatus(ref){
-  var jd=drws.filter(function(d){return d.job_ref===ref&&d.status!=='Superseded';});
+  var jd=drws.filter(function(d){return sameRef(d.job_ref,ref)&&d.status!=='Superseded';});
   if(!jd.length)return {state:'none',total:0,approved:0,oldest:0};
   var appr=jd.filter(function(d){return DRW_PASSED.indexOf(d.status)>=0;}).length;
   var oldest=0;
@@ -3631,6 +3655,27 @@ document.addEventListener('click',function(e){
   }
   if(action==='delSPO')cfm('Delete PO','Permanently delete?',function(){dbDel('supplier_pos','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('buyer');toast('Deleted','s');});});
 
+  if(action==='syncInv'){
+    var iv=null;for(var q=0;q<invs.length;q++){if(invs[q].id===id){iv=invs[q];break;}}
+    if(!iv)return;
+    var vr=invVariance(iv);
+    cfm('Update invoice '+iv.job_ref,'Material '+R(+iv.mat_cost||0)+' &rarr; '+R(vr.live.matSpent)+'<br>Labour '+R(+iv.labour_cost||0)+' &rarr; '+R(vr.live.labCost)+'<br><br>Update this invoice to the current platform figures?',function(){
+      dbPatch('invoices','id=eq.'+id,{mat_cost:vr.live.matSpent,labour_cost:vr.live.labCost,labour_hrs:vr.live.labHrs,standing_hrs:vr.live.stHrs})
+      .then(function(){return loadAll();}).then(function(){go('fin');toast('Invoice updated','s');}).catch(function(e){toast(e.message,'e');});
+    },'Update invoice');
+    return;
+  }
+  if(action==='syncAllInv'){
+    var st=invs.filter(function(x){return invVariance(x).stale;});
+    if(!st.length){toast('Nothing to update','i');return;}
+    cfm('Update '+st.length+' invoice'+(st.length!==1?'s':''),'Bring all flagged invoices in line with the current platform figures?',function(){
+      Promise.all(st.map(function(x){
+        var v=invVariance(x);
+        return dbPatch('invoices','id=eq.'+x.id,{mat_cost:v.live.matSpent,labour_cost:v.live.labCost,labour_hrs:v.live.labHrs,standing_hrs:v.live.stHrs});
+      })).then(function(){return loadAll();}).then(function(){go('fin');toast(st.length+' invoices updated','s');}).catch(function(e){toast(e.message,'e');});
+    },'Update all');
+    return;
+  }
   if(action==='editInv')oInv(id);
   if(action==='editLR')oLR(id);
   if(action==='delLR')cfm('Delete employee','Remove this employee?',function(){dbDel('labour_rates','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('lrates');toast('Deleted','s');});});
