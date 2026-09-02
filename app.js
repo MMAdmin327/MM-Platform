@@ -538,6 +538,20 @@ function fJCs(){
 }
 
 // Compare an invoice against what the platform now holds
+// Figures actually used for profit — live from POs and WIs unless locked
+function invEff(i){
+  if(i.cost_locked){
+    return {mat:+i.mat_cost||0,lab:+i.labour_cost||0,locked:true,
+            liveMat:+i.mat_cost||0,liveLab:+i.labour_cost||0};
+  }
+  var L=calcInvLive(i.job_ref);
+  return {mat:L.matSpent,lab:L.labCost,locked:false,liveMat:L.matSpent,liveLab:L.labCost,live:L};
+}
+function invProfit(i){
+  var e=invEff(i);
+  return (+i.order_val||0)-e.mat-e.lab-(+i.overheads||0);
+}
+
 function invVariance(i){
   var L=calcInvLive(i.job_ref);
   var dMat=Math.round(L.matSpent-(+i.mat_cost||0));
@@ -551,17 +565,24 @@ function invVariance(i){
 function rFin(){
   var comp=orders.filter(function(o){return o.status==='Completed'&&!o.invoiced;});
   var invT=invs.reduce(function(s,i){return s+(+i.order_val||0);},0);
-  var invC=invs.reduce(function(s,i){return s+(+i.mat_cost||0)+(+i.labour_cost||0)+(+i.overheads||0);},0);
+  var invC=invs.reduce(function(s,i){var e=invEff(i);return s+e.mat+e.lab+(+i.overheads||0);},0);
   var prof=invT-invC;var mg=invT>0?Math.round(prof/invT*100):0;
   var stale=invs.filter(function(i){return invVariance(i).stale;});
   var staleAmt=stale.reduce(function(s,i){return s+invVariance(i).total;},0);
   return '<div class="kpis"><div class="kpi cgo"><div class="kpi-l">Total invoiced</div><div class="kpi-v">'+R(invT)+'</div></div><div class="kpi cn"><div class="kpi-l">Total cost</div><div class="kpi-v">'+R(invC)+'</div></div><div class="kpi '+(prof>0?'cg':'cr')+'"><div class="kpi-l">Gross profit</div><div class="kpi-v">'+R(prof)+'</div></div><div class="kpi '+(mg>20?'cg':mg>10?'ca':'cr')+'"><div class="kpi-l">Gross margin</div><div class="kpi-v">'+mg+'%</div></div><div class="kpi '+(comp.length>0?'ca':'cg')+'"><div class="kpi-l">Ready to invoice</div><div class="kpi-v">'+comp.length+'</div></div>'
-  +(stale.length?'<div class="kpi cr"><div class="kpi-l">Costs changed</div><div class="kpi-v">'+stale.length+'</div><div class="kpi-s">'+(staleAmt>=0?'+':'')+R(staleAmt)+' not in invoice</div></div>':'')
+  +(stale.length?'<div class="kpi cb"><div class="kpi-l">Costs moved</div><div class="kpi-v">'+stale.length+'</div><div class="kpi-s">'+(staleAmt>=0?'+':'')+R(staleAmt)+' since invoicing</div></div>':'')
   +'</div>'
-  +(stale.length?'<div style="background:#fff5f5;border:1px solid #fed7d7;border-radius:var(--r);padding:11px 15px;margin-bottom:13px"><div style="font-size:12px;font-weight:600;color:#9b1c1c;margin-bottom:6px">&#9888; '+stale.length+' invoice'+(stale.length!==1?'s have':' has')+' costs booked after invoicing</div><div style="font-size:11px;color:#718096;margin-bottom:8px">Supplier POs or WI hours were added to these jobs after they moved to Finance. The invoice figures below are out of date.</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+stale.map(function(i){var v=invVariance(i);return '<button class="btn btn-sm" data-id="'+i.id+'" data-action="syncInv" title="Update to live figures">'+i.job_ref+' &nbsp;'+(v.total>=0?'+':'')+R(v.total)+'</button>';}).join('')+'<button class="btn btn-sm btn-p" data-action="syncAllInv">Update all</button></div></div>':'')
+  +(stale.length?'<div style="background:#ebf4ff;border:1px solid #bee3f8;border-radius:var(--r);padding:10px 15px;margin-bottom:13px;font-size:11px;color:#1e3a5f"><strong>&#8505; '+stale.length+' job'+(stale.length!==1?'s have':' has')+' picked up costs since invoicing.</strong> Profit and margin below already reflect the current figures &mdash; the original invoiced amount is shown in grey where it differs. <button class="btn btn-sm" data-action="syncAllInv" style="margin-left:6px">Write back to invoices</button></div>':'')
   +(comp.length>0?'<div class="alert-a">&#9888; '+comp.length+' completed order'+(comp.length>1?'s':'')+' ready — '+comp.map(function(o){return o.ref;}).join(', ')+'<div style="display:flex;gap:6px;flex-wrap:wrap">'+comp.map(function(o){return '<button class="btn btn-sm" data-id="'+o.id+'" data-action="toFinance">&rarr; Invoice '+o.ref+'</button>';}).join('')+'</div></div>':'')
   +'<div class="card"><div class="card-hd"><h3>Invoice register &amp; profitability</h3><div class="card-hd-r"><select id="fbu" style="font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;outline:none"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select><button class="btn btn-e" id="expFinBtn">&#8595; Excel</button></div></div>'
-  +'<div class="tw"><table><thead><tr><th>Invoice ref</th><th>Job #</th><th>Client</th><th>BU</th><th>Value</th><th>Mat cost</th><th>Labour</th><th>OH</th><th>Profit</th><th>Margin</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+invs.map(function(i){var p=(+i.order_val||0)-(+i.mat_cost||0)-(+i.labour_cost||0)-(+i.overheads||0);var m=(+i.order_val||0)>0?Math.round(p/(+i.order_val||1)*100):0;var vv=invVariance(i);return '<tr'+(vv.stale?' style="background:#fffbf9"':'')+'><td class="mono">'+i.inv_ref+'</td><td class="mono">'+i.job_ref+(vv.stale?' <span style="background:#fff5f5;color:#9b1c1c;border:1px solid #fed7d7;font-size:8px;font-weight:700;padding:1px 4px;border-radius:8px" title="Costs changed since invoicing">STALE</span>':'')+'</td><td>'+i.client+'</td><td><span class="badge b-bu">'+i.bu+'</span></td><td class="mono">'+R(+i.order_val)+'</td><td class="mono"'+(vv.dMat?' style="color:#c53030" title="Live: '+R(vv.live.matSpent)+'"':'')+'>'+R(+i.mat_cost)+(vv.dMat?' <span style="font-size:9px">('+(vv.dMat>0?'+':'')+R(vv.dMat)+')</span>':'')+'</td><td class="mono"'+(vv.dLab?' style="color:#c53030" title="Live: '+R(vv.live.labCost)+'"':'')+'>'+R(+i.labour_cost)+(vv.dLab?' <span style="font-size:9px">('+(vv.dLab>0?'+':'')+R(vv.dLab)+')</span>':'')+'</td><td class="mono">'+R(+i.overheads)+'</td><td class="'+(p>0?'pp':'pn')+'">'+R(p)+'</td><td><span class="badge '+(m>20?'b-won':'b-lost')+'">'+m+'%</span></td><td class="mono">'+fd(i.invoiced_date)+'</td><td><span class="badge '+(i.status==='Paid'?'b-paid':'b-out')+'">'+i.status+'</span></td><td style="white-space:nowrap">'+(vv.stale?'<button class="btn-g" style="padding:2px 3px;color:#c53030" data-id="'+i.id+'" data-action="syncInv" title="Update to live figures">&#8635;</button>':'')+'<button class="btn-g" style="padding:2px 3px" data-id="'+i.id+'" data-action="editInv">&#9998;</button><button class="btn-d" style="padding:2px 3px" data-id="'+i.id+'" data-action="delInv">&#10005;</button></td></tr>';}).join('')+(invs.length===0?'<tr><td colspan="13" class="empty">No invoices yet</td></tr>':'')+'</tbody></table></div></div>';
+  +'<div class="tw"><table><thead><tr><th>Invoice ref</th><th>Job #</th><th>Client</th><th>BU</th><th>Value</th><th>Mat cost</th><th>Labour</th><th>OH</th><th>Profit</th><th>Margin</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+invs.map(function(i){var p=invProfit(i);var m=(+i.order_val||0)>0?Math.round(p/(+i.order_val||1)*100):0;var e=invEff(i);var vv=invVariance(i);var moved=!e.locked&&vv.stale;return '<tr>'
+    +'<td class="mono">'+i.inv_ref+'</td>'
+    +'<td class="mono">'+i.job_ref+(e.locked?' <span style="background:#f7fafc;color:#718096;border:1px solid #e2e8f0;font-size:8px;font-weight:700;padding:1px 4px;border-radius:8px" title="Costs locked — live changes ignored">&#128274;</span>':'')+'</td>'
+    +'<td>'+i.client+'</td>'
+    +'<td><span class="badge b-bu">'+i.bu+'</span></td>'
+    +'<td class="mono">'+R(+i.order_val)+'</td>'
+    +'<td class="mono"'+(moved&&vv.dMat?' title="Was invoiced at '+R(+i.mat_cost||0)+'"':'')+'>'+R(e.mat)+(moved&&vv.dMat?' <span style="font-size:9px;color:#a0aec0">was '+R(+i.mat_cost||0)+'</span>':'')+'</td>'
+    +'<td class="mono"'+(moved&&vv.dLab?' title="Was invoiced at '+R(+i.labour_cost||0)+'"':'')+'>'+R(e.lab)+(moved&&vv.dLab?' <span style="font-size:9px;color:#a0aec0">was '+R(+i.labour_cost||0)+'</span>':'')+'</td><td class="mono">'+R(+i.overheads)+'</td><td class="'+(p>0?'pp':'pn')+'">'+R(p)+'</td><td><span class="badge '+(m>20?'b-won':'b-lost')+'">'+m+'%</span></td><td class="mono">'+fd(i.invoiced_date)+'</td><td><span class="badge '+(i.status==='Paid'?'b-paid':'b-out')+'">'+i.status+'</span></td><td style="white-space:nowrap"><button class="btn-g" style="padding:2px 3px'+(e.locked?';color:#718096':'')+'" data-id="'+i.id+'" data-action="lockInv" title="'+(e.locked?'Unlock — follow live costs':'Lock costs at these figures')+'">'+(e.locked?'&#128274;':'&#128275;')+'</button><button class="btn-g" style="padding:2px 3px" data-id="'+i.id+'" data-action="editInv">&#9998;</button><button class="btn-d" style="padding:2px 3px" data-id="'+i.id+'" data-action="delInv">&#10005;</button></td></tr>';}).join('')+(invs.length===0?'<tr><td colspan="13" class="empty">No invoices yet</td></tr>':'')+'</tbody></table></div></div>';
 }
 
 function wonToOrder(id){
@@ -948,7 +969,9 @@ function oInv(id){
   +'<div class="f2"><div class="mfr"><label>Invoice ref</label><input id="eIr" value="'+(i.inv_ref||'')+'"></div><div class="mfr"><label>Invoice date</label><input type="date" id="eId" value="'+(i.invoiced_date||'')+'"></div></div>'
   +'<div class="f2"><div class="mfr"><label>Client</label><input id="eIc" value="'+(i.client||'')+'" readonly style="background:#f4f6f9"></div><div class="mfr"><label>Invoice value (R)</label><input type="number" id="eIv" value="'+(i.order_val||0)+'" oninput="calcInvProfit()"></div></div>'
   +'<div style="margin:13px 0 6px;font-size:10px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.07em;border-bottom:2px solid var(--navy);padding-bottom:4px">Cost Capture — Backlog Entry</div>'
-  +'<div class="f2"><div class="mfr"><label>Material cost (R)</label><input type="number" id="eIm" value="'+(i.mat_cost||0)+'" oninput="calcInvProfit()"></div><div class="mfr"><label>Labour cost (R)</label><input type="number" id="eIl" value="'+(i.labour_cost||0)+'" oninput="calcInvProfit()"></div></div>'
+  +(i.cost_locked?'<div style="background:#f7fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 11px;font-size:11px;color:#4a5568;margin-bottom:11px">&#128274; Costs are <strong>locked</strong> on this invoice. Live changes on the Buyer Sheet and WIs are ignored. Unlock from the register to follow live costs again.</div>'
+      :'<div style="background:#ebf4ff;border:1px solid #bee3f8;border-radius:6px;padding:8px 11px;font-size:11px;color:#1e3a5f;margin-bottom:11px">This invoice follows live costs from the Buyer Sheet and WIs. Saving a different figure below will <strong>lock</strong> it at what you enter.</div>')
+  +'<div class="f2"><div class="mfr"><label>Material cost (R)</label><input type="number" id="eIm" value="'+(i.cost_locked?(i.mat_cost||0):live.matSpent)+'" oninput="calcInvProfit()"></div><div class="mfr"><label>Labour cost (R)</label><input type="number" id="eIl" value="'+(i.cost_locked?(i.labour_cost||0):live.labCost)+'" oninput="calcInvProfit()"></div></div>'
   +'<div class="f2"><div class="mfr"><label>Labour hours (record only)</label><input type="number" id="eIlh" value="'+(i.labour_hrs||0)+'"></div><div class="mfr"><label>Standing hours (record only)</label><input type="number" id="eIsh" value="'+(i.standing_hrs||0)+'"></div></div>'
   +'<div class="f2"><div class="mfr"><label>Overheads (R)</label><input type="number" id="eIo" value="'+(i.overheads||0)+'" oninput="calcInvProfit()"></div><div class="mfr"><label>Status</label><select id="eIs"><option'+(i.status==='Outstanding'?' selected':'')+'>Outstanding</option><option'+(i.status==='Paid'?' selected':'')+'>Paid</option></select></div></div>'
   +'<div style="background:#f8fafc;border:2px solid var(--navy);border-radius:8px;padding:11px 13px;margin-bottom:11px">'
@@ -969,7 +992,9 @@ function oInv(id){
     toast('Live figures pulled in','s');
   });
   document.getElementById('saveInvE').addEventListener('click',function(){
-    var data={inv_ref:gv('eIr'),order_val:+gv('eIv')||0,mat_cost:+gv('eIm')||0,labour_cost:+gv('eIl')||0,labour_hrs:+gv('eIlh')||0,standing_hrs:+gv('eIsh')||0,overheads:+gv('eIo')||0,invoiced_date:fmtD(gv('eId')),status:gv('eIs')};
+    var newMat=+gv('eIm')||0,newLab=+gv('eIl')||0;
+    var lockNow=i.cost_locked||Math.abs(newMat-live.matSpent)>=1||Math.abs(newLab-live.labCost)>=1;
+    var data={inv_ref:gv('eIr'),order_val:+gv('eIv')||0,mat_cost:newMat,labour_cost:newLab,labour_hrs:+gv('eIlh')||0,standing_hrs:+gv('eIsh')||0,overheads:+gv('eIo')||0,invoiced_date:fmtD(gv('eId')),status:gv('eIs'),cost_locked:lockNow};
     dbPatch('invoices','id=eq.'+id,data).then(function(){closeM();return loadAll();}).then(function(){go('fin');toast('Invoice updated','s');}).catch(function(e){toast(e.message,'e');});
   });
 }
@@ -986,7 +1011,7 @@ function calcInvProfit(){
 function expFin(){
   var bu=gv('fbu');
   var f=invs.filter(function(i){return !bu||i.bu===bu;});
-  xlx(f.map(function(i){var p=(+i.order_val||0)-(+i.mat_cost||0)-(+i.labour_cost||0)-(+i.overheads||0);var m=(+i.order_val||0)>0?Math.round(p/(+i.order_val||1)*100):0;return {a:i.inv_ref,b:i.job_ref,c:i.client,d:i.bu,e:+i.order_val||0,f:+i.mat_cost||0,g:+i.labour_cost||0,h:+i.overheads||0,i:p,j:m+'%',k:fd(i.invoiced_date),l:i.status};}),
+  xlx(f.map(function(i){var ef=invEff(i);var p=invProfit(i);var m=(+i.order_val||0)>0?Math.round(p/(+i.order_val||1)*100):0;return {a:i.inv_ref,b:i.job_ref,c:i.client,d:i.bu,e:+i.order_val||0,f:ef.mat,g:ef.lab,h:+i.overheads||0,i:p,j:m+'%',k:fd(i.invoiced_date),l:i.status};}),
   [{k:'a',l:'Invoice Ref',w:14},{k:'b',l:'Job #',w:10},{k:'c',l:'Client',w:22},{k:'d',l:'BU',w:18},{k:'e',l:'Value',w:16},{k:'f',l:'Mat Cost',w:14},{k:'g',l:'Labour',w:14},{k:'h',l:'Overhead',w:14},{k:'i',l:'Profit',w:14},{k:'j',l:'Margin',w:10},{k:'k',l:'Date',w:13},{k:'l',l:'Status',w:12}],
   'MM_Finance.xlsx','Finance');
 }
@@ -3657,14 +3682,16 @@ document.addEventListener('click',function(e){
   }
   if(action==='delSPO')cfm('Delete PO','Permanently delete?',function(){dbDel('supplier_pos','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('buyer');toast('Deleted','s');});});
 
-  if(action==='syncInv'){
+  if(action==='lockInv'){
     var iv=null;for(var q=0;q<invs.length;q++){if(invs[q].id===id){iv=invs[q];break;}}
     if(!iv)return;
-    var vr=invVariance(iv);
-    cfm('Update invoice '+iv.job_ref,'Material '+R(+iv.mat_cost||0)+' &rarr; '+R(vr.live.matSpent)+'<br>Labour '+R(+iv.labour_cost||0)+' &rarr; '+R(vr.live.labCost)+'<br><br>Update this invoice to the current platform figures?',function(){
-      dbPatch('invoices','id=eq.'+id,{mat_cost:vr.live.matSpent,labour_cost:vr.live.labCost,labour_hrs:vr.live.labHrs,standing_hrs:vr.live.stHrs})
-      .then(function(){return loadAll();}).then(function(){go('fin');toast('Invoice updated','s');}).catch(function(e){toast(e.message,'e');});
-    },'Update invoice');
+    if(iv.cost_locked){
+      dbPatch('invoices','id=eq.'+id,{cost_locked:false}).then(function(){return loadAll();}).then(function(){go('fin');toast('Following live costs','s');}).catch(function(e){toast(e.message,'e');});
+    }else{
+      var L=calcInvLive(iv.job_ref);
+      dbPatch('invoices','id=eq.'+id,{cost_locked:true,mat_cost:L.matSpent,labour_cost:L.labCost,labour_hrs:L.labHrs,standing_hrs:L.stHrs})
+      .then(function(){return loadAll();}).then(function(){go('fin');toast('Costs locked at current figures','s');}).catch(function(e){toast(e.message,'e');});
+    }
     return;
   }
   if(action==='syncAllInv'){
