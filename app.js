@@ -1,515 +1,187 @@
-/* ============================================================
-   MM Steel Nesting & Procurement Tool
-   ------------------------------------------------------------
-   SETUP REQUIRED:
-   1. Create a Supabase project (or reuse the MM Platform one).
-   2. Run this SQL once in the Supabase SQL editor:
-
-      create table offcut_inventory (
-        id uuid primary key default gen_random_uuid(),
-        profile text not null,
-        grade text not null,
-        length_mm numeric not null,
-        source_job text,
-        note text,
-        created_at timestamptz default now()
-      );
-      alter table offcut_inventory enable row level security;
-      create policy "allow all" on offcut_inventory for all using (true) with check (true);
-
-      (The "allow all" policy matches the open-access pattern used by the
-      other MM Platform tables. Tighten with real auth later if needed.)
-
-   3. Fill in SUPABASE_URL and SUPABASE_ANON_KEY below.
-   ============================================================ */
-
-const SUPABASE_URL = "YOUR_SUPABASE_URL_HERE";
-const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY_HERE";
-
-let supabaseClient = null;
-try {
-  if (SUPABASE_URL.startsWith("http")) {
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  }
-} catch (e) {
-  console.error("Supabase init failed", e);
-}
-
-// ---------- Global state ----------
-let bomRows = [];          // [{profile, grade, length, qty, description}]
-let groupSettings = {};    // key -> stockLength
-let offcutInventory = [];  // live from Supabase: [{id, profile, grade, length_mm, source_job, note, created_at}]
-let nestResult = null;     // output of runNesting()
-
-// ---------- Helpers ----------
-function groupKey(profile, grade) {
-  return (profile || "").trim().toLowerCase() + "||" + (grade || "").trim().toLowerCase();
-}
-function fmt(n) {
-  return Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
-}
-function money(n) {
-  return Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function setMsg(elId, text, type) {
-  const el = document.getElementById(elId);
-  if (!text) { el.innerHTML = ""; return; }
-  el.innerHTML = `<div class="msg ${type}">${text}</div>`;
-}
-
-// ---------- Tab navigation ----------
-document.querySelectorAll(".tab-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
-  });
-});
-
-// ---------- BOM upload ----------
-document.getElementById("bomFile").addEventListener("change", (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (evt) => {
-    try {
-      const data = new Uint8Array(evt.target.result);
-      const wb = XLSX.read(data, { type: "array" });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-      ingestRows(rows);
-    } catch (err) {
-      setMsg("uploadMsg", "Could not read file: " + err.message, "error");
-    }
-  };
-  reader.readAsArrayBuffer(file);
-});
-
-function ingestRows(rows) {
-  const cleaned = [];
-  rows.forEach(r => {
-    const profile = r.Profile || r.profile || r.PROFILE || "";
-    const grade = r.Grade || r.grade || r.GRADE || "Mild Steel";
-    const length = Number(r.Length_mm || r.length_mm || r.Length || r.length || 0);
-    const qty = Number(r.Qty || r.qty || r.Quantity || r.quantity || 0);
-    const description = r.Description || r.description || "";
-    if (profile && length > 0 && qty > 0) {
-      cleaned.push({ profile: String(profile).trim(), grade: String(grade).trim(), length, qty, description });
-    }
-  });
-  if (cleaned.length === 0) {
-    setMsg("uploadMsg", "No valid rows found. Check column headers: Profile, Grade, Length_mm, Qty.", "error");
-    return;
-  }
-  bomRows = bomRows.concat(cleaned);
-  setMsg("uploadMsg", `Loaded ${cleaned.length} BOM line(s).`, "ok");
-  renderBomTable();
-  renderGroupSettings();
-}
-
-document.getElementById("loadSampleBtn").addEventListener("click", () => {
-  ingestRows([
-    { Profile: "50x50x3 Equal Angle", Grade: "Mild Steel", Length_mm: 1850, Qty: 6, Description: "Frame upright" },
-    { Profile: "50x50x3 Equal Angle", Grade: "Mild Steel", Length_mm: 900, Qty: 10, Description: "Cross brace" },
-    { Profile: "50x50x3 Equal Angle", Grade: "Mild Steel", Length_mm: 2400, Qty: 4, Description: "Long rail" },
-    { Profile: "76x76x6 Equal Angle", Grade: "Mild Steel", Length_mm: 3100, Qty: 3, Description: "Column" },
-    { Profile: "76x76x6 Equal Angle", Grade: "Mild Steel", Length_mm: 1200, Qty: 8, Description: "Base plate stiffener" },
-    { Profile: "IPE 200", Grade: "S355", Length_mm: 4200, Qty: 2, Description: "Beam" },
-  ]);
-});
-
-document.getElementById("addRowBtn").addEventListener("click", () => {
-  bomRows.push({ profile: "", grade: "Mild Steel", length: 0, qty: 1, description: "" });
-  renderBomTable();
-  renderGroupSettings();
-});
-
-function renderBomTable() {
-  const card = document.getElementById("bomTableCard");
-  const tbody = document.getElementById("bomTableBody");
-  if (bomRows.length === 0) { card.style.display = "none"; return; }
-  card.style.display = "block";
-  tbody.innerHTML = "";
-  bomRows.forEach((row, i) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><input class="cell-input" data-i="${i}" data-f="profile" value="${escapeHtml(row.profile)}"></td>
-      <td><input class="cell-input" data-i="${i}" data-f="grade" value="${escapeHtml(row.grade)}"></td>
-      <td><input class="cell-input" type="number" data-i="${i}" data-f="length" value="${row.length}"></td>
-      <td><input class="cell-input" type="number" data-i="${i}" data-f="qty" value="${row.qty}"></td>
-      <td><input class="cell-input" data-i="${i}" data-f="description" value="${escapeHtml(row.description)}"></td>
-      <td><button class="del-btn" data-i="${i}">✕</button></td>
-    `;
-    tbody.appendChild(tr);
-  });
-  tbody.querySelectorAll(".cell-input").forEach(inp => {
-    inp.addEventListener("change", (e) => {
-      const i = Number(e.target.dataset.i), f = e.target.dataset.f;
-      bomRows[i][f] = (f === "length" || f === "qty") ? Number(e.target.value) : e.target.value;
-      renderGroupSettings();
-    });
-  });
-  tbody.querySelectorAll(".del-btn").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      bomRows.splice(Number(e.target.dataset.i), 1);
-      renderBomTable();
-      renderGroupSettings();
-    });
-  });
-}
-
-function escapeHtml(s) {
-  return String(s || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
-// ---------- Nesting settings (per group stock length) ----------
-function renderGroupSettings() {
-  const card = document.getElementById("nestSettingsCard");
-  const tbody = document.getElementById("groupTableBody");
-  if (bomRows.length === 0) { card.style.display = "none"; return; }
-  card.style.display = "block";
-
-  const groups = {};
-  bomRows.forEach(r => {
-    if (!r.profile || !r.length || !r.qty) return;
-    const key = groupKey(r.profile, r.grade);
-    if (!groups[key]) groups[key] = { profile: r.profile, grade: r.grade, totalCuts: 0 };
-    groups[key].totalCuts += r.qty;
-  });
-
-  const stockLengths = getStockLengthOptions();
-  tbody.innerHTML = "";
-  Object.entries(groups).forEach(([key, g]) => {
-    if (!groupSettings[key]) groupSettings[key] = stockLengths[stockLengths.length - 1] || stockLengths[0];
-    const options = stockLengths.map(len =>
-      `<option value="${len}" ${Number(groupSettings[key]) === len ? "selected" : ""}>${fmt(len)} mm</option>`
-    ).join("");
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(g.profile)}</td>
-      <td>${escapeHtml(g.grade)}</td>
-      <td>${g.totalCuts}</td>
-      <td><select class="cell-input group-len-select" data-key="${key}">${options}</select></td>
-    `;
-    tbody.appendChild(tr);
-  });
-  tbody.querySelectorAll(".group-len-select").forEach(sel => {
-    sel.addEventListener("change", (e) => {
-      groupSettings[e.target.dataset.key] = Number(e.target.value);
-    });
-  });
-}
-
-function getStockLengthOptions() {
-  const raw = document.getElementById("stockLengthsInput").value;
-  return raw.split(",").map(s => Number(s.trim())).filter(n => n > 0).sort((a, b) => a - b);
-}
-document.getElementById("stockLengthsInput").addEventListener("change", renderGroupSettings);
-
-// ---------- NESTING ENGINE ----------
-// Best-fit-decreasing bin packing, offcuts prioritized over new stock.
-function runNesting() {
-  const kerf = Number(document.getElementById("kerfInput").value) || 0;
-  const minOffcut = Number(document.getElementById("minOffcutInput").value) || 0;
-
-  const groups = {};
-  bomRows.forEach(r => {
-    if (!r.profile || !r.length || !r.qty) return;
-    const key = groupKey(r.profile, r.grade);
-    if (!groups[key]) groups[key] = { profile: r.profile, grade: r.grade, cuts: [] };
-    for (let i = 0; i < r.qty; i++) {
-      groups[key].cuts.push({ length: r.length, description: r.description });
-    }
-  });
-
-  const result = { groupsOutput: [], errors: [], totalScrap: 0, totalNewBars: 0, totalOffcutsUsed: 0, newOffcutsCreated: [], consumedOffcutIds: [], updatedOffcuts: [] };
-
-  Object.entries(groups).forEach(([key, g]) => {
-    const stockLen = groupSettings[key] || getStockLengthOptions()[0];
-    const cuts = [...g.cuts].sort((a, b) => b.length - a.length);
-    const maxCutLen = Math.max(...cuts.map(c => c.length));
-    if (maxCutLen + kerf > stockLen && !offcutInventory.some(o => groupKey(o.profile, o.grade) === key && o.length_mm >= maxCutLen + kerf)) {
-      result.errors.push(`${g.profile} / ${g.grade}: a required cut (${fmt(maxCutLen)}mm) is longer than the chosen stock length (${fmt(stockLen)}mm) and no offcut covers it.`);
-    }
-
-    // Bins: offcut bins first (existing physical pieces), then new-stock bins opened on demand.
-    const offcutBins = offcutInventory
-      .filter(o => groupKey(o.profile, o.grade) === key)
-      .map(o => ({ id: o.id, isOffcut: true, capacity: o.length_mm, remaining: o.length_mm, cuts: [] }));
-    const newBins = [];
-
-    cuts.forEach(cut => {
-      const need = cut.length + kerf;
-      // 1) best-fit among offcut bins with room
-      let candidates = offcutBins.filter(b => b.remaining >= need);
-      let bin;
-      if (candidates.length > 0) {
-        bin = candidates.reduce((best, b) => (b.remaining < best.remaining ? b : best));
-      } else {
-        // 2) best-fit among already-opened new bins
-        candidates = newBins.filter(b => b.remaining >= need);
-        if (candidates.length > 0) {
-          bin = candidates.reduce((best, b) => (b.remaining < best.remaining ? b : best));
-        } else {
-          // 3) open a new bin
-          bin = { isOffcut: false, capacity: stockLen, remaining: stockLen, cuts: [] };
-          newBins.push(bin);
-        }
-      }
-      if (bin.remaining >= need) {
-        bin.cuts.push(cut);
-        bin.remaining -= need;
-      } else {
-        result.errors.push(`${g.profile}: cut of ${fmt(cut.length)}mm could not be placed on any available length.`);
-      }
-    });
-
-    // Resolve offcut bins: used (partially or fully) vs untouched
-    const usedOffcutBins = offcutBins.filter(b => b.cuts.length > 0);
-    usedOffcutBins.forEach(b => {
-      result.consumedOffcutIds.push(b.id);
-      if (b.remaining >= minOffcut) {
-        result.updatedOffcuts.push({ oldId: b.id, profile: g.profile, grade: g.grade, length_mm: Math.round(b.remaining) });
-      } else {
-        result.totalScrap += b.remaining;
-      }
-    });
-    result.totalOffcutsUsed += usedOffcutBins.length;
-
-    newBins.forEach(b => {
-      result.totalNewBars += 1;
-      if (b.remaining >= minOffcut) {
-        result.newOffcutsCreated.push({ profile: g.profile, grade: g.grade, length_mm: Math.round(b.remaining) });
-      } else {
-        result.totalScrap += b.remaining;
-      }
-    });
-
-    result.groupsOutput.push({
-      profile: g.profile, grade: g.grade, stockLen,
-      bars: [...usedOffcutBins.map(b => ({ ...b, source: "offcut" })), ...newBins.map(b => ({ ...b, source: "new" }))]
-    });
-  });
-
-  return result;
-}
-
-document.getElementById("runNestBtn").addEventListener("click", () => {
-  nestResult = runNesting();
-  setMsg("nestMsg", nestResult.errors.length
-    ? nestResult.errors.map(e => "⚠ " + e).join("<br>")
-    : "Nesting complete — see Cut List and Procurement tabs.",
-    nestResult.errors.length ? "error" : "ok");
-  renderCutList();
-  renderProcurement();
-});
-
-// ---------- CUT LIST RENDER ----------
-function renderCutList() {
-  const content = document.getElementById("cutListContent");
-  const statsEl = document.getElementById("cutListStats");
-  if (!nestResult) { content.innerHTML = `<div class="empty-state">Run nesting first.</div>`; statsEl.innerHTML = ""; return; }
-
-  const kerf = Number(document.getElementById("kerfInput").value) || 0;
-  statsEl.innerHTML = `
-    <div class="stat-box good"><div class="label">Offcuts reused</div><div class="value">${nestResult.totalOffcutsUsed}</div></div>
-    <div class="stat-box"><div class="label">New bars to cut</div><div class="value">${nestResult.totalNewBars}</div></div>
-    <div class="stat-box warn"><div class="label">Scrap generated</div><div class="value">${fmt(nestResult.totalScrap)} mm</div></div>
-    <div class="stat-box"><div class="label">Blade kerf used</div><div class="value">${kerf} mm</div></div>
-  `;
-
-  let html = "";
-  nestResult.groupsOutput.forEach(g => {
-    html += `<div class="card"><h2>${escapeHtml(g.profile)} — ${escapeHtml(g.grade)}</h2>`;
-    if (g.bars.length === 0) html += `<div class="empty-state">No cuts.</div>`;
-    g.bars.forEach((bar, idx) => {
-      const label = bar.source === "offcut" ? `Offcut #${String(bar.id).slice(0, 8)}` : `New bar ${idx + 1} (${fmt(bar.capacity)}mm)`;
-      const pillClass = bar.source === "offcut" ? "offcut" : "new";
-      let segsHtml = "";
-      bar.cuts.forEach(c => {
-        const pct = (c.length / bar.capacity) * 100;
-        segsHtml += `<div class="bar-seg" style="width:${pct}%;" title="${fmt(c.length)}mm ${escapeHtml(c.description || "")}">${fmt(c.length)}</div>`;
-      });
-      const wastePct = (bar.remaining / bar.capacity) * 100;
-      if (wastePct > 0.3) segsHtml += `<div class="bar-seg waste" style="width:${wastePct}%;">${fmt(Math.round(bar.remaining))}</div>`;
-      html += `
-        <div class="bar-block">
-          <div class="bar-head">
-            <span><span class="pill ${pillClass}">${bar.source === "offcut" ? "OFFCUT" : "NEW"}</span> ${label}</span>
-            <span>${bar.cuts.length} cut(s) · ${fmt(Math.round(bar.remaining))}mm left over</span>
-          </div>
-          <div class="bar-visual">${segsHtml}</div>
-        </div>`;
-    });
-    html += `</div>`;
-  });
-  content.innerHTML = html;
-}
-
-// ---------- PROCUREMENT RENDER ----------
-let procUnitPrices = {}; // key -> price
-
-function renderProcurement() {
-  const tbody = document.getElementById("procTableBody");
-  if (!nestResult) { tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Run nesting first.</td></tr>`; return; }
-
-  const rows = {};
-  nestResult.groupsOutput.forEach(g => {
-    const newBars = g.bars.filter(b => b.source === "new").length;
-    if (newBars === 0) return;
-    const key = groupKey(g.profile, g.grade) + "|" + g.stockLen;
-    rows[key] = { profile: g.profile, grade: g.grade, stockLen: g.stockLen, qty: newBars };
-  });
-
-  if (Object.keys(rows).length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No new stock needed — fully covered by offcuts.</td></tr>`;
-    document.getElementById("procTotal").textContent = "0.00";
-    return;
-  }
-
-  tbody.innerHTML = "";
-  let total = 0;
-  Object.entries(rows).forEach(([key, r]) => {
-    const price = procUnitPrices[key] || 0;
-    const lineTotal = price * r.qty;
-    total += lineTotal;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(r.profile)}</td>
-      <td>${escapeHtml(r.grade)}</td>
-      <td>${fmt(r.stockLen)}</td>
-      <td>${r.qty}</td>
-      <td><input class="cell-input proc-price" type="number" data-key="${key}" value="${price}" style="max-width:100px;"></td>
-      <td>${money(lineTotal)}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-  document.getElementById("procTotal").textContent = money(total);
-
-  tbody.querySelectorAll(".proc-price").forEach(inp => {
-    inp.addEventListener("input", (e) => {
-      procUnitPrices[e.target.dataset.key] = Number(e.target.value) || 0;
-      renderProcurement();
-      renderBudget();
-    });
-  });
-}
-
-// ---------- OFFCUT INVENTORY (Supabase) ----------
-async function loadOffcuts() {
-  const status = document.getElementById("connStatus");
-  if (!supabaseClient) {
-    status.textContent = "⚠ Supabase not configured — inventory is not shared";
-    document.getElementById("offcutTableBody").innerHTML = `<tr><td colspan="6" class="empty-state">Set SUPABASE_URL / SUPABASE_ANON_KEY in app.js to enable shared inventory.</td></tr>`;
-    return;
-  }
-  const { data, error } = await supabaseClient.from("offcut_inventory").select("*").order("created_at", { ascending: false });
-  if (error) {
-    status.textContent = "⚠ Inventory connection error";
-    console.error(error);
-    return;
-  }
-  offcutInventory = data || [];
-  status.textContent = `Inventory connected · ${offcutInventory.length} offcut(s) in stock`;
-  renderOffcutTable();
-}
-
-function renderOffcutTable() {
-  const tbody = document.getElementById("offcutTableBody");
-  const filter = (document.getElementById("offcutFilter").value || "").toLowerCase();
-  const filtered = offcutInventory.filter(o => !filter || o.profile.toLowerCase().includes(filter));
-  if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No offcuts in inventory.</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = "";
-  filtered.forEach(o => {
-    const tr = document.createElement("tr");
-    const date = o.created_at ? new Date(o.created_at).toLocaleDateString() : "";
-    tr.innerHTML = `
-      <td>${escapeHtml(o.profile)}</td>
-      <td>${escapeHtml(o.grade)}</td>
-      <td>${fmt(o.length_mm)}</td>
-      <td>${escapeHtml(o.source_job || "—")}</td>
-      <td>${date}</td>
-      <td><button class="del-btn" data-id="${o.id}">✕</button></td>
-    `;
-    tbody.appendChild(tr);
-  });
-  tbody.querySelectorAll(".del-btn").forEach(btn => {
-    btn.addEventListener("click", async (e) => {
-      if (!confirm("Remove this offcut from inventory?")) return;
-      await supabaseClient.from("offcut_inventory").delete().eq("id", e.target.dataset.id);
-      loadOffcuts();
-    });
-  });
-}
-document.getElementById("offcutFilter").addEventListener("input", renderOffcutTable);
-document.getElementById("refreshOffcutsBtn").addEventListener("click", loadOffcuts);
-
-document.getElementById("manAddBtn").addEventListener("click", async () => {
-  const profile = document.getElementById("manProfile").value.trim();
-  const grade = document.getElementById("manGrade").value.trim() || "Mild Steel";
-  const length_mm = Number(document.getElementById("manLength").value);
-  const note = document.getElementById("manNote").value.trim();
-  if (!profile || !length_mm) { setMsg("manAddMsg", "Profile and length are required.", "error"); return; }
-  if (!supabaseClient) { setMsg("manAddMsg", "Supabase not configured.", "error"); return; }
-  const { error } = await supabaseClient.from("offcut_inventory").insert([{ profile, grade, length_mm, note }]);
-  if (error) { setMsg("manAddMsg", "Error saving: " + error.message, "error"); return; }
-  setMsg("manAddMsg", "Added to inventory.", "ok");
-  document.getElementById("manProfile").value = "";
-  document.getElementById("manLength").value = "";
-  document.getElementById("manNote").value = "";
-  loadOffcuts();
-});
-
-// ---------- COMMIT JOB (write consumed + new offcuts back to Supabase) ----------
-document.getElementById("commitBtn").addEventListener("click", async () => {
-  if (!nestResult) { setMsg("commitMsg", "Run nesting first.", "error"); return; }
-  if (!supabaseClient) { setMsg("commitMsg", "Supabase not configured — nothing to commit.", "error"); return; }
-  const jobRef = document.getElementById("budgetJob").value.trim() || null;
-
-  try {
-    // Remove fully-consumed / reduced offcuts, then re-insert updated remainders and new offcuts
-    if (nestResult.consumedOffcutIds.length > 0) {
-      await supabaseClient.from("offcut_inventory").delete().in("id", nestResult.consumedOffcutIds);
-    }
-    const toInsert = [
-      ...nestResult.updatedOffcuts.map(o => ({ profile: o.profile, grade: o.grade, length_mm: o.length_mm, source_job: jobRef })),
-      ...nestResult.newOffcutsCreated.map(o => ({ profile: o.profile, grade: o.grade, length_mm: o.length_mm, source_job: jobRef })),
-    ];
-    if (toInsert.length > 0) {
-      await supabaseClient.from("offcut_inventory").insert(toInsert);
-    }
-    setMsg("commitMsg", `Inventory updated: ${nestResult.consumedOffcutIds.length} offcut(s) consumed, ${toInsert.length} new offcut(s) added.`, "ok");
-    loadOffcuts();
-  } catch (err) {
-    setMsg("commitMsg", "Commit failed: " + err.message, "error");
-  }
-});
-
-// ---------- BUDGET ----------
-function renderBudget() {
-  const budget = Number(document.getElementById("budgetAmount").value) || 0;
-  let procTotal = 0;
-  if (nestResult) {
-    nestResult.groupsOutput.forEach(g => {
-      const newBars = g.bars.filter(b => b.source === "new").length;
-      const key = groupKey(g.profile, g.grade) + "|" + g.stockLen;
-      procTotal += (procUnitPrices[key] || 0) * newBars;
-    });
-  }
-  const variance = budget - procTotal;
-  const el = document.getElementById("budgetStats");
-  el.innerHTML = `
-    <div class="stat-box"><div class="label">Material budget</div><div class="value">R ${money(budget)}</div></div>
-    <div class="stat-box"><div class="label">Procurement cost (new stock)</div><div class="value">R ${money(procTotal)}</div></div>
-    <div class="stat-box ${variance >= 0 ? "good" : "warn"}"><div class="label">${variance >= 0 ? "Under budget by" : "Over budget by"}</div><div class="value">R ${money(Math.abs(variance))}</div></div>
-  `;
-}
-document.getElementById("budgetAmount").addEventListener("input", renderBudget);
-
-// ---------- INIT ----------
-loadOffcuts();
-renderBudget();
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mine Minerals — Operations Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--navy:#0f1923;--navy2:#1a2a3a;--gold:#c8a45a;--gold2:#e8c47a;--border:#e2e8f0;--bg:#f4f6f9;--surface:#fff;--text:#1a202c;--muted:#718096;--green:#276749;--green-bg:#f0fff4;--amber:#92400e;--amber-bg:#fffbeb;--red:#9b1c1c;--red-bg:#fff5f5;--blue:#1e3a5f;--blue-bg:#ebf4ff;--purple:#44337a;--purple-bg:#faf5ff;--purple-border:#d6bcfa;--r:6px;--rlg:10px}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:13px}
+#login{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--navy);padding:20px}
+.lcard{background:#fff;border-radius:16px;padding:40px;width:400px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.llogo{width:64px;height:64px;object-fit:contain;border-radius:8px;margin:0 auto 16px}
+.lco{font-size:16px;font-weight:600;color:var(--navy);margin-bottom:2px}
+.ltag{font-size:10px;color:var(--gold);font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-bottom:24px}
+.ldiv{height:1px;background:var(--border);margin:20px 0}
+.fr{margin-bottom:11px;text-align:left}
+.fr label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+.fr input{width:100%;font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 11px;border:1.5px solid var(--border);border-radius:var(--r);outline:none}
+.fr input:focus{border-color:var(--navy)}
+.lbtn{width:100%;padding:11px;background:var(--navy);color:#fff;border:none;border-radius:var(--r);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;margin-top:4px}
+.lbtn:hover{background:var(--navy2)}
+.lerr{background:var(--red-bg);border:1px solid #fed7d7;color:var(--red);border-radius:var(--r);padding:9px 12px;font-size:12px;margin-top:10px;display:none;text-align:left}
+#app{display:none}
+.wrap{max-width:1600px;margin:0 auto;padding:14px}
+.hdr{background:var(--navy);display:flex;align-items:stretch;min-height:56px;border-radius:10px 10px 0 0;overflow:hidden}
+.hdr-brand{background:var(--navy2);padding:0 18px;display:flex;align-items:center;gap:11px;border-right:1px solid rgba(255,255,255,.07)}
+.hdr-logo{width:36px;height:36px;object-fit:contain;border-radius:4px}
+.hdr-name{color:#fff;font-size:12px;font-weight:600}
+.hdr-sub{color:var(--gold);font-size:10px}
+.hdr-mid{flex:1;display:flex;align-items:center;padding:0 18px;gap:10px}
+.hdr-tag{background:rgba(200,164,90,.12);border:1px solid rgba(200,164,90,.25);color:var(--gold2);font-size:10px;font-weight:600;padding:3px 10px;border-radius:20px;letter-spacing:.06em;text-transform:uppercase}
+.hdr-date{color:rgba(255,255,255,.35);font-size:11px;font-family:'DM Mono',monospace;margin-left:auto}
+.hdr-right{display:flex;align-items:center;gap:12px;padding:0 16px;border-left:1px solid rgba(255,255,255,.07)}
+.sdot{width:7px;height:7px;border-radius:50%;background:#38a169}
+.sdot.syncing{background:var(--gold);animation:blink 1s infinite}
+.sdot.err{background:#fc8181}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.slbl{font-size:10px;color:rgba(255,255,255,.45);font-family:'DM Mono',monospace}
+.hdr-uname{color:#fff;font-size:12px;font-weight:500}
+.hdr-urole{color:rgba(255,255,255,.4);font-size:10px}
+.btn-out{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-family:'DM Sans',sans-serif;font-size:11px;padding:5px 12px;border-radius:var(--r);cursor:pointer}
+.btn-out:hover{background:rgba(255,255,255,.14);color:#fff}
+.nav{background:#fff;border-bottom:2px solid var(--border);display:flex;overflow-x:auto;padding:0 6px}
+.nbtn{font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:0 15px;height:43px;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.nbtn:hover{color:var(--text)}
+.nbtn.active{color:var(--navy);border-bottom-color:var(--navy);font-weight:600}
+.npip{width:6px;height:6px;border-radius:50%;background:var(--gold);display:none}
+.nbtn.active .npip{display:block}
+.body{background:var(--bg);padding:17px;border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;min-height:480px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:#fff;border:1px solid var(--border);border-radius:var(--rlg);padding:13px 15px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.kpi::after{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.kpi.cn::after{background:var(--navy)}.kpi.cg::after{background:#38a169}.kpi.cr::after{background:#e53e3e}.kpi.ca::after{background:#d69e2e}.kpi.cb::after{background:#3182ce}.kpi.cgo::after{background:var(--gold)}
+.kpi-l{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
+.kpi-v{font-size:20px;font-weight:600;font-family:'DM Mono',monospace;line-height:1}
+.kpi-s{font-size:10px;color:var(--muted);margin-top:4px}
+.card{background:#fff;border:1px solid var(--border);border-radius:var(--rlg);margin-bottom:13px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.card-hd{padding:12px 17px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:#fafbfc}
+.card-hd h3{font-size:13px;font-weight:600;color:var(--navy)}
+.card-hd-r{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.toolbar{padding:9px 17px;border-bottom:1px solid var(--border);display:flex;gap:7px;flex-wrap:wrap;align-items:center;background:#fcfcfd}
+.toolbar input,.toolbar select{font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:var(--r);background:#fff;color:var(--text);outline:none}
+.toolbar input{flex:1;min-width:130px}
+.toolbar input:focus,.toolbar select:focus{border-color:var(--navy)}
+.btn{font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:5px 13px;border-radius:var(--r);cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--text);white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+.btn:hover{background:#f1f5f9}
+.btn-p{background:var(--navy);color:#fff;border-color:var(--navy)}.btn-p:hover{background:var(--navy2)}
+.btn-e{background:var(--navy2);color:#fff;border-color:var(--navy2);font-size:11px;padding:4px 11px}.btn-e:hover{background:var(--navy)}
+.btn-won{background:#276749;color:#fff;border-color:#276749;font-size:10px;padding:3px 8px}
+.btn-won:hover{background:#1e5238}
+.btn-sm{font-size:11px;padding:3px 9px}
+.btn-g{background:none;border:none;padding:3px 6px;color:var(--muted);cursor:pointer;border-radius:4px;font-size:14px}.btn-g:hover{background:var(--bg);color:var(--text)}
+.btn-d{background:none;border:none;padding:3px 6px;color:#fc8181;cursor:pointer;border-radius:4px;font-size:14px}.btn-d:hover{background:var(--red-bg);color:var(--red)}
+.tw{overflow-x:auto;overflow-y:auto;max-height:520px}
+.tw-compact table{min-width:auto;width:100%}
+.tw-compact th{padding:8px 7px;font-size:10px}
+.tw-compact td{padding:7px 7px;font-size:11px}
+.tw-compact .badge{padding:1px 5px;font-size:9px}
+.sticky-col{position:sticky;right:0;background:#fff;box-shadow:-2px 0 4px rgba(0,0,0,.06)}
+tr:hover .sticky-col{background:#f8fafc}
+table{width:100%;border-collapse:collapse;font-size:12px;table-layout:auto}
+.tw table{min-width:900px}
+th{text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;padding:10px 16px;border-bottom:1px solid var(--border);background:#fafbfc;white-space:nowrap;position:sticky;top:0;z-index:2}
+td{padding:10px 16px;border-bottom:1px solid #f0f2f5;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#f8fafc}
+.mono{font-family:'DM Mono',monospace;font-size:11px}
+.badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.04em;white-space:nowrap;border:1px solid transparent}
+.b-lead{background:var(--blue-bg);color:var(--blue);border-color:#bee3f8}
+.b-quoted{background:var(--amber-bg);color:var(--amber);border-color:#fcd34d}
+.b-won{background:var(--green-bg);color:var(--green);border-color:#c6f6d5}
+.b-lost{background:var(--red-bg);color:var(--red);border-color:#fed7d7}
+.b-open{background:var(--blue-bg);color:var(--blue);border-color:#bee3f8}
+.b-prog{background:var(--amber-bg);color:var(--amber);border-color:#fcd34d}
+.b-done{background:var(--green-bg);color:var(--green);border-color:#c6f6d5}
+.b-inv{background:#f7fafc;color:#4a5568;border-color:#e2e8f0}
+.b-paid{background:var(--green-bg);color:var(--green);border-color:#c6f6d5}
+.b-out{background:var(--amber-bg);color:var(--amber);border-color:#fcd34d}
+.b-bu{background:var(--purple-bg);color:var(--purple);border-color:var(--purple-border);font-size:10px}
+.b-recv{background:var(--green-bg);color:var(--green);border-color:#c6f6d5}
+.b-pend{background:var(--amber-bg);color:var(--amber);border-color:#fcd34d}
+.sla-ok{color:#276749;font-weight:700;font-family:'DM Mono',monospace;font-size:11px}
+.sla-warn{color:#d97706;font-weight:700;font-family:'DM Mono',monospace;font-size:11px}
+.sla-late{color:#c53030;font-weight:700;font-family:'DM Mono',monospace;font-size:11px}
+.pp{color:#276749;font-weight:600;font-family:'DM Mono',monospace;font-size:11px}
+.pn{color:#c53030;font-weight:600;font-family:'DM Mono',monospace;font-size:11px}
+.ob{color:#c53030;font-weight:600}
+.mov{position:fixed;inset:0;background:rgba(10,18,26,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
+.mbox{background:#fff;border-radius:12px;padding:22px;width:100%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:92vh;overflow-y:auto}
+.mtitle{font-size:14px;font-weight:600;color:var(--navy);margin-bottom:15px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.mfr{margin-bottom:11px}
+.mfr label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+.mfr input,.mfr select,.mfr textarea{width:100%;font-family:'DM Sans',sans-serif;font-size:12px;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--r);outline:none}
+.mfr input:focus,.mfr select:focus,.mfr textarea:focus{border-color:var(--navy)}
+.mfr textarea{height:52px;resize:vertical}
+.mfoot{display:flex;justify-content:flex-end;gap:7px;margin-top:17px;padding-top:13px;border-top:1px solid var(--border)}
+.cov{position:fixed;inset:0;background:rgba(10,18,26,.6);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px}
+.cbox{background:#fff;border-radius:12px;padding:22px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.cbox h4{font-size:14px;font-weight:600;color:var(--navy);margin-bottom:7px}
+.cbox p{font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.6}
+.cbtns{display:flex;gap:7px;justify-content:flex-end}
+.btn-del{background:var(--red-bg);color:var(--red);border:1px solid #fed7d7}.btn-del:hover{background:#fed7d7}
+#toast{position:fixed;bottom:18px;right:18px;padding:10px 16px;border-radius:8px;font-size:12px;font-weight:500;z-index:9999;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;transform:translateY(6px);box-shadow:0 4px 16px rgba(0,0,0,.15)}
+#toast.show{opacity:1;transform:translateY(0)}
+#toast.ts{background:#276749;color:#fff}
+#toast.te{background:#9b1c1c;color:#fff}
+#toast.ti{background:var(--navy);color:#fff}
+.empty{text-align:center;padding:32px;color:#a0aec0;font-size:12px}
+.alert-a{background:var(--amber-bg);border:1px solid #fcd34d;border-radius:var(--r);padding:10px 15px;margin-bottom:13px;display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap;font-size:12px;font-weight:500;color:var(--amber)}
+.info-box{background:#f4f6f9;border-radius:6px;padding:11px;margin-bottom:11px;font-size:12px}
+.info-box-title{font-weight:600;margin-bottom:5px;color:#0f1923}
+.info-box-sub{color:#718096}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+<div id="login">
+  <div class="lcard">
+    <img class="llogo" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAARCAAoACgDASIAAhEBAxEB/8QAGgAAAgMBAQAAAAAAAAAAAAAAAAMBBAUCBv/EACkQAAIBBAEEAQQDAQAAAAAAAAECAAMRBBIhMUFRBSJhcROBkbHR/8QAGAEAAwEBAAAAAAAAAAAAAAAAAAECAwT/xAAhEQACAgICAgMAAAAAAAAAAAAAAQIREiExA0FRsf/aAAwDAQACEQMRAD8A7zRWK8bmpxr3YHWkxNw3PVUB3YkgCZ0eMYJCqSSdADzM/I+R+O47bQE3LrqPf1MfNWjXvgLCk7Gxv3qY2cqrHQXc23fME/bHLbLo4gg18AzHkyWEY5bKbMnXJQfGiGVsU0bixcJJJIHgSv1nksHHWx+bFuBUafmF0E1vff5mSi2V7s9L69CbDhPOuR3OFjV81/y+LNbqhHWrHRHpIHv5m3icZbl51bfVhbqKQdlve/B9j0mzgFuLYVLjBn3sgEbHoPExLALVJEL2P73Gl6QhO/UZHE4e5a4q1RDKG10knsB8dZ9LjNFkiDoCR9TbF57w+Tz0hTqbbGZfN2+TXNX62lNKCoBqRBQBc11ULG7jbv5X0/6Z5YmpVwTa/xL8ZRQAqgADoAJzQhCqC0Xt+TMlpJdFkH4Y//2Q==" alt="MM">
+    <div class="lco">Mine Minerals Supplies &amp; Services</div>
+    <div class="ltag">Operations Platform</div>
+    <div class="ldiv"></div>
+    <div class="fr"><label>Username</label><input type="text" id="lu" placeholder="Enter username" autocomplete="username"></div>
+    <div class="fr"><label>Password</label><input type="password" id="lp" placeholder="Enter password" autocomplete="current-password"></div>
+    <button class="lbtn" id="loginBtn">Sign in</button>
+    <div class="lerr" id="lerr">Incorrect username or password.</div>
+  </div>
+</div>
+<div id="app">
+<div class="wrap">
+  <div class="hdr">
+    <div class="hdr-brand">
+      <img class="hdr-logo" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAARCAAoACgDASIAAhEBAxEB/8QAGgAAAgMBAQAAAAAAAAAAAAAAAAMBBAUCBv/EACkQAAIBBAEEAQQDAQAAAAAAAAECAAMRBBIhMUFRBSJhcROBkbHR/8QAGAEAAwEBAAAAAAAAAAAAAAAAAAECAwT/xAAhEQACAgICAgMAAAAAAAAAAAAAAQIREiExA0FRsf/aAAwDAQACEQMRAD8A7zRWK8bmpxr3YHWkxNw3PVUB3YkgCZ0eMYJCqSSdADzM/I+R+O47bQE3LrqPf1MfNWjXvgLCk7Gxv3qY2cqrHQXc23fME/bHLbLo4gg18AzHkyWEY5bKbMnXJQfGiGVsU0bixcJJJIHgSv1nksHHWx+bFuBUafmF0E1vff5mSi2V7s9L69CbDhPOuR3OFjV81/y+LNbqhHWrHRHpIHv5m3icZbl51bfVhbqKQdlve/B9j0mzgFuLYVLjBn3sgEbHoPExLALVJEL2P73Gl6QhO/UZHE4e5a4q1RDKG10knsB8dZ9LjNFkiDoCR9TbF57w+Tz0hTqbbGZfN2+TXNX62lNKCoBqRBQBc11ULG7jbv5X0/6Z5YmpVwTa/xL8ZRQAqgADoAJzQhCqC0Xt+TMlpJdFkH4Y//2Q==" alt="MM">
+      <div><div class="hdr-name">Mine Minerals Supplies &amp; Services</div><div class="hdr-sub">Rustenburg &middot; 066 212 2225 &middot; info@mineminerals.co.za</div></div>
+    </div>
+    <div class="hdr-mid"><span class="hdr-tag">Operations Platform</span><span class="hdr-date" id="hdate"></span></div>
+    <div class="hdr-right">
+      <div style="display:flex;align-items:center;gap:5px"><div class="sdot" id="sdot"></div><span class="slbl" id="slbl">Ready</span></div>
+      <div><div class="hdr-uname" id="uname">-</div><div class="hdr-urole" id="urole">-</div></div>
+      <button class="btn-out" id="apiKeyBtn" title="Set Anthropic API Key">🔑 API Key</button>
+      <button class="btn-out" id="logoutBtn">Sign out</button>
+    </div>
+  </div>
+  <div class="nav" id="nav">
+    <button class="nbtn active" data-tab="dash"><span class="npip"></span>Dashboard</button>
+    <button class="nbtn" data-tab="leads"><span class="npip"></span>New Business</button>
+    <button class="nbtn" data-tab="orders"><span class="npip"></span>Order Book</button>
+    <button class="nbtn" data-tab="drawings"><span class="npip"></span>Drawings</button>
+    <button class="nbtn" data-tab="planner"><span class="npip"></span>Planner</button>
+    <button class="nbtn" data-tab="buyer"><span class="npip"></span>Buyer Sheet</button>
+    <button class="nbtn" data-tab="fin" id="finTab"><span class="npip"></span>Finance</button>
+    <button class="nbtn" data-tab="reports"><span class="npip"></span>Reports</button>
+    <button class="nbtn" data-tab="wi"><span class="npip"></span>Work Instructions</button>
+    <button class="nbtn" data-tab="jcosting" id="jcostTab"><span class="npip"></span>Job Costing</button>
+    <button class="nbtn" data-tab="lrates" id="lratesTab"><span class="npip"></span>Labour Rates</button>
+  </div>
+  <div class="body" id="body"><div class="empty">Loading...</div></div>
+</div>
+</div>
+<script src="app.js?v=14"></script>
+</body>
+</html>
