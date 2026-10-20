@@ -10,6 +10,8 @@ var USERS=[
   {u:'martin',p:'MM@Admin2026',name:'Martin Spies',role:'CEO'},
   {u:'estimator',p:'MM@Est2026',name:'Estimator',role:'Estimator'},
   {u:'sales',p:'MM@Sales2026',name:'Internal Sales',role:'Sales'},
+  {u:'sales1',p:'MM@Rep1_2026',name:'Sales Rep 1',role:'Sales'},
+  {u:'sales2',p:'MM@Rep2_2026',name:'Sales Rep 2',role:'Sales'},
   {u:'ops',p:'MM@Ops2026',name:'Operations Manager',role:'Operations'},
   {u:'finance',p:'MM@Fin2026',name:'Finance',role:'Finance'},
   {u:'buyer',p:'MM@Buy2026',name:'Buyer',role:'Buyer'},
@@ -20,7 +22,7 @@ var USERS=[
   {u:'planner',p:'MM@Plan2026',name:'Planner',role:'Planner'},
   {u:'draughting',p:'MM@Draw2026',name:'Draughting',role:'Draughting'}
 ];
-var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],msettings=[],planr=[],drws=[],bepd=[],cUser=null;
+var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],msettings=[],planr=[],drws=[],bepd=[],projects=[],sis=[],pclaims=[],cUser=null;
 var plView='week';
 
 function dbGet(t,q){
@@ -45,8 +47,8 @@ function dbDel(t,q){
 
 function loadAll(){
   sync(true,'Loading...');
-  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];}),dbGet('work_instructions').catch(function(){return[];}),dbGet('month_settings').catch(function(){return[];}),dbGet('planner_items').catch(function(){return[];}),dbGet('drawings').catch(function(){return[];}),dbGet('bep_data').catch(function(){return[];})]).then(function(res){
-    leads=res[0];orders=res[1];spos=res[2];jcs=[];invs=res[3];lrates=res[4]||[];wis=res[5]||[];msettings=res[6]||[];planr=(res[7]||[]).sort(function(a,b){return (+a.seq||0)-(+b.seq||0);});drws=res[8]||[];bepd=res[9]||[];
+  return Promise.all([dbGet('leads'),dbGet('orders'),dbGet('supplier_pos'),dbGet('invoices'),dbGet('labour_rates').catch(function(){return[];}),dbGet('work_instructions').catch(function(){return[];}),dbGet('month_settings').catch(function(){return[];}),dbGet('planner_items').catch(function(){return[];}),dbGet('drawings').catch(function(){return[];}),dbGet('bep_data').catch(function(){return[];}),dbGet('projects').catch(function(){return[];}),dbGet('site_instructions').catch(function(){return[];}),dbGet('progress_claims').catch(function(){return[];})]).then(function(res){
+    leads=res[0];orders=res[1];spos=res[2];jcs=[];invs=res[3];lrates=res[4]||[];wis=res[5]||[];msettings=res[6]||[];planr=(res[7]||[]).sort(function(a,b){return (+a.seq||0)-(+b.seq||0);});drws=res[8]||[];bepd=res[9]||[];projects=res[10]||[];sis=res[11]||[];pclaims=res[12]||[];
     sync(false,'Live');
   }).catch(function(e){sync(false,'Error',true);toast('Load error: '+e.message,'e');});
 }
@@ -162,7 +164,7 @@ function xlx(data,cols,file,sheet){
 }
 
 function go(tab){
-  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,fin:rFin,wi:rWI,jcosting:rJobCosting,lrates:rLRates,reports:rReports,planner:rPlanner,drawings:rDrawings};
+  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,fin:rFin,wi:rWI,jcosting:rJobCosting,lrates:rLRates,reports:rReports,planner:rPlanner,drawings:rDrawings,projects:rProjects};
   var body=document.getElementById('body');
   body.innerHTML=renders[tab]?renders[tab]():'';
   if(tab==='planner')setTimeout(renderPlanner,0);
@@ -439,6 +441,438 @@ function oReturnToQuote(id){
   });
 }
 
+// ── PROJECTS / TENDER CONTRACTS ──────────────────────────────────────────────
+var SI_STATUS=['Received','Priced','Submitted','Approved','Rejected'];
+var SI_SB={'Received':'background:#fffbeb;color:#92400e;border-color:#fcd34d','Priced':'background:#ebf4ff;color:#1e3a5f;border-color:#bee3f8','Submitted':'background:#faf5ff;color:#44337a;border-color:#d6bcfa','Approved':'background:#f0fff4;color:#276749;border-color:#c6f6d5','Rejected':'background:#fff5f5;color:#9b1c1c;border-color:#fed7d7'};
+function siBadge(s){return '<span class="badge" style="'+(SI_SB[s]||SI_SB.Received)+'">'+s+'</span>';}
+
+var CLAIM_STATUS=['Draft','Submitted','Certified','Paid'];
+var CLAIM_SB={'Draft':'background:#f7fafc;color:#4a5568;border-color:#e2e8f0','Submitted':'background:#fffbeb;color:#92400e;border-color:#fcd34d','Certified':'background:#ebf4ff;color:#1e3a5f;border-color:#bee3f8','Paid':'background:#f0fff4;color:#276749;border-color:#c6f6d5'};
+function claimBadge(s){return '<span class="badge" style="'+(CLAIM_SB[s]||CLAIM_SB.Draft)+'">'+s+'</span>';}
+
+var curProj=null;
+
+function projOrders(ref){return orders.filter(function(o){return sameRef(o.project_ref,ref);});}
+function projSIs(ref){return sis.filter(function(s){return sameRef(s.proj_ref,ref);});}
+function projClaims(ref){return pclaims.filter(function(c){return sameRef(c.proj_ref,ref);}).sort(function(a,b){return (+a.claim_no||0)-(+b.claim_no||0);});}
+
+// Actual cost to date across every job on the project
+function projActualCost(ref){
+  var jobs=projOrders(ref);
+  var mat=0,lab=0,hrs=0,tons=0;
+  jobs.forEach(function(o){
+    mat+=spos.filter(function(p){return sameRef(p.job_ref,o.ref);}).reduce(function(s,p){return s+(+p.amount||0);},0);
+    wis.filter(function(w){return sameRef(w.job_ref,o.ref);}).forEach(function(w){
+      var ld=w.labour_data?JSON.parse(w.labour_data):[];
+      ld.forEach(function(e){
+        if(!e.emp)return;
+        var h=(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);
+        var rt=0;for(var i=0;i<lrates.length;i++){if(lrates[i].emp_name===e.emp){rt=+lrates[i].rate||0;break;}}
+        hrs+=h;lab+=h*rt;tons+=(+e.kg||0);
+      });
+      var sd=w.standing_data?JSON.parse(w.standing_data):[];
+      sd.forEach(function(e){
+        if(!e.emp)return;
+        var h=(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);
+        var rt=0;for(var i=0;i<lrates.length;i++){if(lrates[i].emp_name===e.emp){rt=+lrates[i].rate||0;break;}}
+        lab+=h*rt;
+      });
+    });
+  });
+  return {mat:Math.round(mat),lab:Math.round(lab),total:Math.round(mat+lab),hrs:Math.round(hrs*10)/10,kg:Math.round(tons),jobs:jobs.length};
+}
+
+// The whole earned-value picture for a project
+function projMetrics(p){
+  var ref=p.proj_ref;
+  var ac=projActualCost(ref);
+  var si=projSIs(ref);
+  var apprSI=si.filter(function(s){return s.status==='Approved';});
+  var pendSI=si.filter(function(s){return s.status==='Received'||s.status==='Priced'||s.status==='Submitted';});
+
+  var siVal=apprSI.reduce(function(s,x){return s+(+x.value||0);},0);
+  var siCost=apprSI.reduce(function(s,x){return s+(+x.cost_est||0);},0);
+  var siTons=apprSI.reduce(function(s,x){return s+(+x.tonnage||0);},0);
+  var pendVal=pendSI.reduce(function(s,x){return s+(+x.value||0);},0);
+  var pendCost=pendSI.reduce(function(s,x){return s+(+x.cost_est||0);},0);
+
+  // Contract and budget grow with approved SIs
+  var contract=(+p.contract_value||0)+siVal;
+  var budget=(+p.budget_cost||0)+siCost;
+  var totTons=(+p.total_tonnage||0)+siTons;
+
+  var pct=totTons>0?Math.min(1,ac.kg/totTons):0;
+  var ev=budget*pct;                                  // earned value
+  var cpi=ac.total>0?ev/ac.total:(ev>0?99:0);         // cost performance index
+  var eac=cpi>0?budget/cpi:budget;                    // forecast final cost
+  var fcMargin=contract-eac;
+  var fcMarginPct=contract>0?fcMargin/contract*100:0;
+  var planMargin=contract-budget;
+  var planMarginPct=contract>0?planMargin/contract*100:0;
+
+  // Claims and cash
+  var cl=projClaims(ref);
+  var claimed=cl.reduce(function(s,c){return s+(+c.value_claimed||0);},0);
+  var certified=cl.filter(function(c){return c.status==='Certified'||c.status==='Paid';}).reduce(function(s,c){return s+(+c.value_certified||0);},0);
+  var paid=cl.filter(function(c){return c.status==='Paid';}).reduce(function(s,c){return s+(+c.value_certified||0);},0);
+  var retention=cl.reduce(function(s,c){return s+(+c.retention_held||0);},0);
+  var outstanding=certified-paid;
+  var uncertified=claimed-certified;
+
+  return {ac:ac,contract:contract,budget:budget,totTons:totTons,pct:pct,ev:Math.round(ev),
+          cpi:cpi,eac:Math.round(eac),fcMargin:Math.round(fcMargin),fcMarginPct:fcMarginPct,
+          planMargin:Math.round(planMargin),planMarginPct:planMarginPct,
+          siVal:siVal,siCost:siCost,pendVal:pendVal,pendCost:pendCost,pendCount:pendSI.length,
+          baseContract:+p.contract_value||0,baseBudget:+p.budget_cost||0,
+          claimed:claimed,certified:certified,paid:paid,retention:retention,
+          outstanding:outstanding,uncertified:uncertified,claims:cl.length,
+          unbilled:Math.round(ev>0?(contract*pct)-claimed:0)};
+}
+
+function cpiColour(c){return c>=1?'#276749':c>=0.9?'#d97706':'#c53030';}
+
+function rProjects(){
+  if(curProj)return rProjectDetail();
+  var act=projects.filter(function(p){return p.status==='Active';});
+  var tv=act.reduce(function(s,p){return s+projMetrics(p).contract;},0);
+  var atRisk=act.filter(function(p){var m=projMetrics(p);return m.cpi>0&&m.cpi<0.95&&m.ac.total>0;});
+  var totRet=act.reduce(function(s,p){return s+projMetrics(p).retention;},0);
+  var totOut=act.reduce(function(s,p){return s+projMetrics(p).outstanding;},0);
+
+  var rows=projects.map(function(p){
+    var m=projMetrics(p);
+    var hasCost=m.ac.total>0;
+    return '<tr'+(p.status!=='Active'?' style="opacity:.55"':'')+'>'
+    +'<td class="mono"><button class="btn-g" style="font-family:monospace;font-size:11px;font-weight:700;color:var(--navy);padding:2px 4px" data-id="'+p.id+'" data-action="openProj">'+p.proj_ref+'</button></td>'
+    +'<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(p.name||'')+'">'+(p.name||'—')+'</td>'
+    +'<td>'+(p.client||'—')+'</td>'
+    +'<td style="text-align:center;font-family:monospace">'+m.ac.jobs+'</td>'
+    +'<td class="mono">'+R(m.contract)+(m.siVal?'<div style="font-size:9px;color:#276749">+'+R(m.siVal)+' SI</div>':'')+'</td>'
+    +'<td style="text-align:center;font-family:monospace;font-weight:600">'+Math.round(m.pct*100)+'%</td>'
+    +'<td class="mono">'+R(m.ac.total)+'</td>'
+    +'<td style="text-align:center;font-family:monospace;font-weight:700;color:'+(hasCost?cpiColour(m.cpi):'#cbd5e0')+'">'+(hasCost?m.cpi.toFixed(2):'—')+'</td>'
+    +'<td class="mono" style="font-weight:600;color:'+(m.fcMargin>=0?'#276749':'#c53030')+'">'+(hasCost?R(m.fcMargin):'—')+(hasCost?'<div style="font-size:9px;color:#718096">'+m.fcMarginPct.toFixed(1)+'%</div>':'')+'</td>'
+    +'<td>'+(p.status==='Active'?'<span class="badge b-open">Active</span>':p.status==='Complete'?'<span class="badge b-done">Complete</span>':'<span class="badge b-inv">'+p.status+'</span>')+'</td>'
+    +'<td style="white-space:nowrap"><button class="btn-g" style="padding:2px 3px" data-id="'+p.id+'" data-action="editProj">&#9998;</button><button class="btn-d" style="padding:2px 3px" data-id="'+p.id+'" data-action="delProj">&#10005;</button></td>'
+    +'</tr>';
+  }).join('');
+
+  return '<div class="kpis">'
+  +'<div class="kpi cn"><div class="kpi-l">Active projects</div><div class="kpi-v">'+act.length+'</div></div>'
+  +'<div class="kpi cgo"><div class="kpi-l">Contract value</div><div class="kpi-v">'+R(tv)+'</div><div class="kpi-s">Incl. approved SIs</div></div>'
+  +'<div class="kpi '+(atRisk.length?'cr':'cg')+'"><div class="kpi-l">Overrunning</div><div class="kpi-v">'+atRisk.length+'</div><div class="kpi-s">CPI below 0.95</div></div>'
+  +'<div class="kpi '+(totOut>0?'ca':'cg')+'"><div class="kpi-l">Certified unpaid</div><div class="kpi-v">'+R(totOut)+'</div></div>'
+  +'<div class="kpi cb"><div class="kpi-l">Retention held</div><div class="kpi-v">'+R(totRet)+'</div><div class="kpi-s">Earned, not banked</div></div>'
+  +'</div>'
+  +'<div class="card"><div class="card-hd"><h3>Project register</h3><div class="card-hd-r"><button class="btn btn-p btn-sm" id="addProjBtn">+ New project</button></div></div>'
+  +'<div class="tw tw-compact"><table><thead><tr>'
+  +'<th style="width:92px">Project</th><th>Name</th><th style="width:120px">Client</th>'
+  +'<th style="width:40px;text-align:center">Jobs</th><th style="width:104px">Contract</th>'
+  +'<th style="width:54px;text-align:center">Prog</th><th style="width:96px">Cost to date</th>'
+  +'<th style="width:46px;text-align:center">CPI</th><th style="width:100px">Forecast margin</th>'
+  +'<th style="width:76px">Status</th><th style="width:52px">Actions</th>'
+  +'</tr></thead><tbody>'+(rows||'<tr><td colspan="11" class="empty">No projects yet — click <strong>+ New project</strong> to set one up</td></tr>')+'</tbody></table></div></div>';
+}
+
+function rProjectDetail(){
+  var p=curProj;
+  var m=projMetrics(p);
+  var jobs=projOrders(p.proj_ref);
+  var si=projSIs(p.proj_ref);
+  var cl=projClaims(p.proj_ref);
+  var hasCost=m.ac.total>0;
+
+  function tile(lbl,val,sub,col,bord){
+    return '<div style="background:#fff;border:1.5px solid '+(bord||'var(--border)')+';border-radius:8px;padding:12px"><div style="font-size:10px;font-weight:700;color:#718096;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">'+lbl+'</div><div style="font-size:19px;font-weight:700;font-family:monospace'+(col?';color:'+col:'')+'">'+val+'</div>'+(sub?'<div style="font-size:10px;color:#718096;margin-top:2px">'+sub+'</div>':'')+'</div>';
+  }
+  function bar(pct,col){
+    var w=Math.min(Math.max(pct,0),100);
+    return '<div style="background:#f0f2f5;border-radius:4px;height:7px;width:100%;margin-top:5px"><div style="background:'+col+';width:'+w+'%;height:7px;border-radius:4px"></div></div>';
+  }
+
+  // Jobs table
+  var jobRows=jobs.map(function(o){
+    var mat=spos.filter(function(x){return sameRef(x.job_ref,o.ref);}).reduce(function(s,x){return s+(+x.amount||0);},0);
+    var lab=0,kg=0;
+    wis.filter(function(w){return sameRef(w.job_ref,o.ref);}).forEach(function(w){
+      var ld=w.labour_data?JSON.parse(w.labour_data):[];
+      ld.forEach(function(e){
+        if(!e.emp)return;
+        var h=(+e.mon||0)+(+e.tue||0)+(+e.wed||0)+(+e.thu||0)+(+e.fri||0)+(+e.sat||0);
+        var rt=0;for(var i=0;i<lrates.length;i++){if(lrates[i].emp_name===e.emp){rt=+lrates[i].rate||0;break;}}
+        lab+=h*rt;kg+=(+e.kg||0);
+      });
+    });
+    return '<tr><td class="mono" style="font-weight:600">'+o.ref+'</td>'
+    +'<td><span class="badge b-bu">'+o.bu+'</span></td>'
+    +'<td style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(o.type||o.notes||'—')+'</td>'
+    +'<td class="mono">'+R(+o.order_val||0)+'</td>'
+    +'<td class="mono">'+R(mat)+'</td>'
+    +'<td class="mono">'+R(lab)+'</td>'
+    +'<td style="text-align:center;font-family:monospace">'+(kg?Math.round(kg).toLocaleString('en-ZA'):'—')+'</td>'
+    +'<td>'+obadge(o.status)+'</td></tr>';
+  }).join('');
+
+  // SI table
+  var siRows=si.map(function(s){
+    var marg=(+s.value||0)-(+s.cost_est||0);
+    var mp=(+s.value||0)>0?marg/(+s.value)*100:0;
+    return '<tr><td class="mono" style="font-weight:600">'+(s.si_ref||'—')+'</td>'
+    +'<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(s.description||'')+'">'+(s.description||'—')+'</td>'
+    +'<td class="mono" style="font-size:10px">'+fd(s.date_received)+'</td>'
+    +'<td class="mono">'+R(+s.value||0)+'</td>'
+    +'<td class="mono" style="color:#718096">'+R(+s.cost_est||0)+'</td>'
+    +'<td class="mono" style="font-weight:600;color:'+(marg>=0?'#276749':'#c53030')+'">'+R(marg)+(s.value?'<div style="font-size:9px;color:#718096">'+mp.toFixed(0)+'%</div>':'')+'</td>'
+    +'<td style="text-align:center;font-family:monospace">'+((+s.tonnage||0)?Math.round(+s.tonnage).toLocaleString('en-ZA'):'—')+'</td>'
+    +'<td>'+siBadge(s.status||'Received')+'</td>'
+    +'<td style="white-space:nowrap"><button class="btn-g" style="padding:2px 3px" data-id="'+s.id+'" data-action="editSI">&#9998;</button><button class="btn-d" style="padding:2px 3px" data-id="'+s.id+'" data-action="delSI">&#10005;</button></td></tr>';
+  }).join('');
+
+  // Claims table
+  var clRows=cl.map(function(c){
+    var diff=(+c.value_certified||0)-(+c.value_claimed||0);
+    var cert=c.status==='Certified'||c.status==='Paid';
+    return '<tr><td style="text-align:center;font-family:monospace;font-weight:700">'+(c.claim_no||'—')+'</td>'
+    +'<td class="mono" style="font-size:10px">'+fd(c.period_end)+'</td>'
+    +'<td class="mono">'+R(+c.value_claimed||0)+'</td>'
+    +'<td class="mono">'+(cert?R(+c.value_certified||0):'<span style="color:#cbd5e0">—</span>')+(cert&&diff?'<div style="font-size:9px;color:'+(diff<0?'#c53030':'#276749')+'">'+(diff>0?'+':'')+R(diff)+'</div>':'')+'</td>'
+    +'<td class="mono" style="color:#718096">'+R(+c.retention_held||0)+'</td>'
+    +'<td class="mono" style="font-size:10px">'+fd(c.date_submitted)+'</td>'
+    +'<td class="mono" style="font-size:10px">'+fd(c.date_paid)+'</td>'
+    +'<td>'+claimBadge(c.status||'Draft')+'</td>'
+    +'<td style="white-space:nowrap"><button class="btn-g" style="padding:2px 3px" data-id="'+c.id+'" data-action="editClaim">&#9998;</button><button class="btn-d" style="padding:2px 3px" data-id="'+c.id+'" data-action="delClaim">&#10005;</button></td></tr>';
+  }).join('');
+
+  return '<div class="card"><div class="card-hd" style="background:var(--navy)">'
+  +'<h3 style="color:#fff">'+p.proj_ref+' &mdash; '+(p.name||'')+'</h3>'
+  +'<div class="card-hd-r"><button class="btn btn-sm" id="projBackBtn">&larr; All projects</button><button class="btn btn-sm" id="projEditBtn" style="background:var(--gold);color:var(--navy);border-color:var(--gold);font-weight:600">&#9998; Edit project</button></div></div>'
+  +'<div style="background:#f4f6f9;padding:10px 14px;font-size:12px;display:flex;gap:22px;flex-wrap:wrap;border-bottom:1px solid var(--border)">'
+  +'<span><strong>Client:</strong> '+(p.client||'—')+'</span>'
+  +'<span><strong>Entity:</strong> '+(p.entity||'MMSS')+'</span>'
+  +(p.tender_ref?'<span><strong>Tender:</strong> '+p.tender_ref+'</span>':'')
+  +'<span><strong>Period:</strong> '+fd(p.start_date)+' &rarr; '+fd(p.end_date)+'</span>'
+  +'<span><strong>Retention:</strong> '+(+p.retention_pct||0)+'%</span>'
+  +'</div>'
+
+  // Earned value block
+  +'<div style="padding:14px;background:#f8fafc;border-bottom:1px solid var(--border)">'
+  +'<div style="font-size:10px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.07em;margin-bottom:9px">Cost performance</div>'
+  +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(142px,1fr));gap:10px">'
+  +tile('Contract value',R(m.contract),m.siVal?'Base '+R(m.baseContract)+' + SI '+R(m.siVal):'Tender value')
+  +tile('Progress',Math.round(m.pct*100)+'%',Math.round(m.ac.kg).toLocaleString('en-ZA')+' of '+Math.round(m.totTons).toLocaleString('en-ZA')+' kg')
+  +tile('Earned value',R(m.ev),'Budget &times; progress')
+  +tile('Actual cost',R(m.ac.total),'Mat '+R(m.ac.mat)+' &middot; Lab '+R(m.ac.lab))
+  +tile('Cost performance',hasCost?m.cpi.toFixed(2):'—',hasCost?(m.cpi>=1?'R1 buys R'+m.cpi.toFixed(2):'R1 of work costs R'+(1/m.cpi).toFixed(2)):'No cost booked',hasCost?cpiColour(m.cpi):'#cbd5e0',hasCost&&m.cpi<0.95?'#fed7d7':null)
+  +tile('Forecast final cost',hasCost?R(m.eac):R(m.budget),'Budget '+R(m.budget))
+  +tile('Forecast margin',hasCost?R(m.fcMargin):R(m.planMargin),(hasCost?m.fcMarginPct:m.planMarginPct).toFixed(1)+'% &middot; planned '+m.planMarginPct.toFixed(1)+'%',(hasCost?m.fcMargin:m.planMargin)>=0?'#276749':'#c53030',hasCost&&m.fcMargin<0?'#fed7d7':null)
+  +'</div>'
+  +'<div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:10px;color:#718096;margin-bottom:2px"><span>Progress '+Math.round(m.pct*100)+'%</span><span>Budget spent '+(m.budget>0?Math.round(m.ac.total/m.budget*100):0)+'%</span></div>'
+  +bar(m.pct*100,'#276749')
+  +bar(m.budget>0?m.ac.total/m.budget*100:0,m.budget>0&&m.ac.total/m.budget>m.pct?'#c53030':'#3182ce')
+  +'</div>'
+  +(hasCost&&m.cpi<0.95?'<div style="background:#fff5f5;border:1px solid #fed7d7;border-radius:6px;padding:10px 13px;margin-top:11px;font-size:11px;color:#9b1c1c"><strong>&#9888; Running over.</strong> At '+Math.round(m.pct*100)+'% complete you have spent '+R(m.ac.total)+' against '+R(m.ev)+' of earned value. If nothing changes the job finishes at '+R(m.eac)+' &mdash; '+(m.fcMargin<0?'a loss of '+R(Math.abs(m.fcMargin)):'a margin of '+R(m.fcMargin)+' instead of the '+R(m.planMargin)+' tendered')+'.</div>':'')
+  +(m.pendCount?'<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:10px 13px;margin-top:9px;font-size:11px;color:#92400e"><strong>&#9888; '+m.pendCount+' site instruction'+(m.pendCount!==1?'s':'')+' not yet approved</strong> &mdash; '+R(m.pendVal)+' of work at risk, '+R(m.pendCost)+' of cost already exposed. Chase approval before the work is done.</div>':'')
+  +'</div>'
+
+  // Cash block
+  +'<div style="padding:14px;border-bottom:1px solid var(--border)">'
+  +'<div style="font-size:10px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.07em;margin-bottom:9px">Cash position</div>'
+  +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(142px,1fr));gap:10px">'
+  +tile('Work done, unclaimed',R(Math.max(0,m.unbilled)),'Value earned not yet claimed',m.unbilled>0?'#d97706':null)
+  +tile('Claimed',R(m.claimed),m.claims+' claim'+(m.claims!==1?'s':''))
+  +tile('Certified',R(m.certified),m.uncertified>0?R(m.uncertified)+' in dispute':'All claims certified',m.uncertified>0?'#d97706':null)
+  +tile('Certified unpaid',R(m.outstanding),'Awaiting payment',m.outstanding>0?'#d97706':'#276749')
+  +tile('Retention held',R(m.retention),(+p.retention_pct||0)+'% &mdash; earned, not banked','#3182ce')
+  +'</div></div>'
+
+  // Jobs
+  +'<div style="padding:11px 14px;font-size:12px;font-weight:600;color:var(--navy);background:#fafbfc;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+  +'<span>Jobs on this project ('+jobs.length+')</span>'
+  +'<button class="btn btn-sm" id="linkJobBtn">+ Link a job</button></div>'
+  +'<div class="tw tw-compact"><table><thead><tr><th style="width:84px">Job #</th><th style="width:94px">BU</th><th>Description</th><th style="width:94px">Value</th><th style="width:94px">Materials</th><th style="width:94px">Labour</th><th style="width:66px;text-align:center">KG</th><th style="width:78px">Status</th></tr></thead><tbody>'
+  +(jobRows||'<tr><td colspan="8" class="empty">No jobs linked yet &mdash; link MM numbers to roll their costs into this project</td></tr>')+'</tbody></table></div>'
+
+  // Site instructions
+  +'<div style="padding:11px 14px;font-size:12px;font-weight:600;color:var(--navy);background:#fafbfc;border-top:1px solid var(--border);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+  +'<span>Site instructions ('+si.length+')</span>'
+  +'<button class="btn btn-sm" id="addSIBtn">+ New SI</button></div>'
+  +'<div class="tw tw-compact"><table><thead><tr><th style="width:84px">SI ref</th><th>Description</th><th style="width:66px">Received</th><th style="width:94px">Value</th><th style="width:94px">Est. cost</th><th style="width:88px">Margin</th><th style="width:60px;text-align:center">KG</th><th style="width:86px">Status</th><th style="width:52px">Actions</th></tr></thead><tbody>'
+  +(siRows||'<tr><td colspan="9" class="empty">No site instructions recorded</td></tr>')+'</tbody></table></div>'
+
+  // Claims
+  +'<div style="padding:11px 14px;font-size:12px;font-weight:600;color:var(--navy);background:#fafbfc;border-top:1px solid var(--border);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'
+  +'<span>Progress claims ('+cl.length+')</span>'
+  +'<button class="btn btn-sm" id="addClaimBtn">+ New claim</button></div>'
+  +'<div class="tw tw-compact"><table><thead><tr><th style="width:44px;text-align:center">No</th><th style="width:72px">Period end</th><th style="width:100px">Claimed</th><th style="width:100px">Certified</th><th style="width:90px">Retention</th><th style="width:70px">Submitted</th><th style="width:70px">Paid</th><th style="width:80px">Status</th><th style="width:52px">Actions</th></tr></thead><tbody>'
+  +(clRows||'<tr><td colspan="9" class="empty">No claims submitted</td></tr>')+'</tbody></table></div>'
+  +'</div>';
+}
+
+// ── FORMS ────────────────────────────────────────────────────────────────────
+function oProj(id){
+  var p=id?(function(){for(var i=0;i<projects.length;i++){if(projects[i].id===id)return projects[i];}return null;})():null;
+  openM('<div class="mtitle">'+(id?'Edit project':'New project')+'</div>'
+  +'<div class="f2"><div class="mfr"><label>Project reference</label><input id="pjRef" value="'+(p?p.proj_ref||'':'')+'" placeholder="e.g. PRJ-2026-01"></div><div class="mfr"><label>Entity</label><select id="pjEntity"><option'+(p&&p.entity==='MMSS'?' selected':'')+'>MMSS</option><option'+(p&&p.entity==='Bokamoso'?' selected':'')+'>Bokamoso</option></select></div></div>'
+  +'<div class="mfr"><label>Project name</label><input id="pjName" value="'+(p?(p.name||'').replace(/"/g,'&quot;'):'')+'"></div>'
+  +'<div class="f2"><div class="mfr"><label>Client</label><input id="pjClient" value="'+(p?(p.client||'').replace(/"/g,'&quot;'):'')+'"></div><div class="mfr"><label>Tender reference</label><input id="pjTender" value="'+(p?p.tender_ref||'':'')+'"></div></div>'
+  +'<div style="background:#f4f6f9;border-radius:8px;padding:12px;margin-bottom:11px">'
+  +'<div style="font-size:10px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Tender figures</div>'
+  +'<div class="f2"><div class="mfr"><label>Contract value (R)</label><input type="number" id="pjVal" value="'+(p?+p.contract_value||0:0)+'" oninput="pjCalc()"></div><div class="mfr"><label>Budget cost (R)</label><input type="number" id="pjBud" value="'+(p?+p.budget_cost||0:0)+'" oninput="pjCalc()"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Total contract tonnage (kg)</label><input type="number" id="pjTons" value="'+(p?+p.total_tonnage||0:0)+'"></div><div class="mfr"><label>Retention (%)</label><input type="number" id="pjRet" value="'+(p?+p.retention_pct||0:0)+'" min="0" max="100" step="0.5"></div></div>'
+  +'<div style="font-size:11px;color:#718096">Planned margin: <strong id="pjMarg" style="color:var(--navy)">—</strong></div>'
+  +'</div>'
+  +'<div class="f2"><div class="mfr"><label>Start date</label><input type="date" id="pjStart" value="'+(p?p.start_date||'':td())+'"></div><div class="mfr"><label>End date</label><input type="date" id="pjEnd" value="'+(p?p.end_date||'':'')+'"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Status</label><select id="pjStatus">'+['Active','On hold','Complete','Cancelled'].map(function(s){return '<option'+(p&&p.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div><div class="mfr"><label>Notes</label><input id="pjNotes" value="'+(p?(p.notes||'').replace(/"/g,'&quot;'):'')+'"></div></div>'
+  +'<div class="mfoot"><button class="btn" id="pjCancel">Cancel</button><button class="btn btn-p" id="pjSave">'+(id?'Update':'Create project')+'</button></div>');
+  setTimeout(pjCalc,40);
+  document.getElementById('pjCancel').addEventListener('click',closeM);
+  document.getElementById('pjSave').addEventListener('click',function(){
+    var ref=gv('pjRef').trim();
+    if(!ref){toast('Please enter a project reference','e');return;}
+    if(!id){
+      for(var i=0;i<projects.length;i++){if(sameRef(projects[i].proj_ref,ref)){toast('Project '+ref+' already exists','e');return;}}
+    }
+    var b={proj_ref:ref,name:gv('pjName'),client:gv('pjClient'),tender_ref:gv('pjTender'),entity:gv('pjEntity'),
+      contract_value:+gv('pjVal')||0,budget_cost:+gv('pjBud')||0,total_tonnage:+gv('pjTons')||0,
+      retention_pct:+gv('pjRet')||0,start_date:fmtD(gv('pjStart')),end_date:fmtD(gv('pjEnd')),
+      status:gv('pjStatus'),notes:gv('pjNotes')};
+    var pr=id?dbPatch('projects','id=eq.'+id,b):dbPost('projects',b);
+    pr.then(function(){closeM();return loadAll();}).then(function(){
+      if(curProj&&curProj.id===id){for(var i=0;i<projects.length;i++){if(projects[i].id===id)curProj=projects[i];}}
+      go('projects');toast('Project saved','s');
+    }).catch(function(e){toast(e.message,'e');});
+  });
+}
+
+function pjCalc(){
+  var v=+gv('pjVal')||0,b=+gv('pjBud')||0;
+  var m=v-b, pc=v>0?m/v*100:0;
+  var el=document.getElementById('pjMarg');
+  if(el){el.textContent=R(m)+' ('+pc.toFixed(1)+'%)';el.style.color=m>=0?'#276749':'#c53030';}
+}
+
+function oSI(id){
+  if(!curProj)return;
+  var s=id?(function(){for(var i=0;i<sis.length;i++){if(sis[i].id===id)return sis[i];}return null;})():null;
+  var jobs=projOrders(curProj.proj_ref);
+  var jobOpts='<option value="">— Not yet allocated —</option>'+jobs.map(function(o){return '<option value="'+o.ref+'"'+(s&&s.job_ref===o.ref?' selected':'')+'>'+o.ref+' — '+(o.type||o.bu)+'</option>';}).join('');
+  var nextRef=curProj.proj_ref+'/SI'+String(projSIs(curProj.proj_ref).length+1).padStart(2,'0');
+
+  openM('<div class="mtitle">'+(id?'Edit site instruction':'New site instruction')+'</div>'
+  +'<div style="background:#f4f6f9;border-radius:6px;padding:9px 12px;font-size:11px;color:#718096;margin-bottom:12px">'+curProj.proj_ref+' &mdash; '+(curProj.name||'')+'</div>'
+  +'<div class="f2"><div class="mfr"><label>SI reference</label><input id="siRef" value="'+(s?s.si_ref||'':nextRef)+'"></div><div class="mfr"><label>Issued by</label><input id="siBy" value="'+(s?(s.issued_by||'').replace(/"/g,'&quot;'):'')+'" placeholder="Client representative"></div></div>'
+  +'<div class="mfr"><label>Description of instructed work</label><input id="siDesc" value="'+(s?(s.description||'').replace(/"/g,'&quot;'):'')+'"></div>'
+  +'<div class="f2"><div class="mfr"><label>Value to client (R)</label><input type="number" id="siVal" value="'+(s?+s.value||0:0)+'" oninput="siCalc()"></div><div class="mfr"><label>Estimated cost (R)</label><input type="number" id="siCost" value="'+(s?+s.cost_est||0:0)+'" oninput="siCalc()"></div></div>'
+  +'<div style="background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:11px;color:#718096;margin-bottom:11px">Margin on this SI: <strong id="siMarg" style="color:var(--navy)">—</strong></div>'
+  +'<div class="f2"><div class="mfr"><label>Additional tonnage (kg)</label><input type="number" id="siTons" value="'+(s?+s.tonnage||0:0)+'"></div><div class="mfr"><label>Allocated to job</label><select id="siJob">'+jobOpts+'</select></div></div>'
+  +'<div class="mfr"><label>Status</label><select id="siStatus" onchange="siToggleDates()">'+SI_STATUS.map(function(x){return '<option'+(s&&s.status===x?' selected':(!s&&x==='Received'?' selected':''))+'>'+x+'</option>';}).join('')+'</select></div>'
+  +'<div class="f2"><div class="mfr"><label>Date received</label><input type="date" id="siRecv" value="'+(s?s.date_received||td():td())+'"></div><div class="mfr" id="siApprBox"><label>Date approved</label><input type="date" id="siAppr" value="'+(s?s.date_approved||'':'')+'"></div></div>'
+  +'<div class="mfr"><label>Notes</label><input id="siNotes" value="'+(s?(s.notes||'').replace(/"/g,'&quot;'):'')+'"></div>'
+  +'<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:9px 12px;font-size:11px;color:#92400e;margin-bottom:11px">Only <strong>Approved</strong> SIs add to the contract value and budget. Anything else counts as exposure.</div>'
+  +'<div class="mfoot"><button class="btn" id="siCancel">Cancel</button><button class="btn btn-p" id="siSave">'+(id?'Update SI':'Save SI')+'</button></div>');
+
+  setTimeout(function(){siCalc();siToggleDates();},40);
+  document.getElementById('siCancel').addEventListener('click',closeM);
+  document.getElementById('siSave').addEventListener('click',function(){
+    if(!gv('siRef')){toast('Please enter an SI reference','e');return;}
+    var st=gv('siStatus');
+    if(st==='Approved'&&!gv('siAppr')){toast('Please set the approval date','e');return;}
+    var b={proj_ref:curProj.proj_ref,si_ref:gv('siRef'),description:gv('siDesc'),issued_by:gv('siBy'),
+      date_received:fmtD(gv('siRecv')),date_approved:fmtD(gv('siAppr')),
+      value:+gv('siVal')||0,cost_est:+gv('siCost')||0,tonnage:+gv('siTons')||0,
+      status:st,job_ref:gv('siJob'),notes:gv('siNotes')};
+    var pr=id?dbPatch('site_instructions','id=eq.'+id,b):dbPost('site_instructions',b);
+    pr.then(function(){closeM();return loadAll();}).then(function(){go('projects');toast('SI saved','s');}).catch(function(e){toast(e.message,'e');});
+  });
+}
+
+function siCalc(){
+  var v=+gv('siVal')||0,c=+gv('siCost')||0;
+  var m=v-c, pc=v>0?m/v*100:0;
+  var el=document.getElementById('siMarg');
+  if(el){el.textContent=R(m)+(v>0?' ('+pc.toFixed(1)+'%)':'');el.style.color=m>=0?'#276749':'#c53030';}
+}
+function siToggleDates(){
+  var b=document.getElementById('siApprBox');
+  if(!b)return;
+  var st=gv('siStatus');
+  b.style.visibility=(st==='Approved'||st==='Rejected')?'visible':'hidden';
+  if(st==='Approved'){var a=document.getElementById('siAppr');if(a&&!a.value)a.value=td();}
+}
+
+function oClaim(id){
+  if(!curProj)return;
+  var c=id?(function(){for(var i=0;i<pclaims.length;i++){if(pclaims[i].id===id)return pclaims[i];}return null;})():null;
+  var existing=projClaims(curProj.proj_ref);
+  var nextNo=c?c.claim_no:(existing.length?Math.max.apply(null,existing.map(function(x){return +x.claim_no||0;}))+1:1);
+  var m=projMetrics(curProj);
+  var retPct=+curProj.retention_pct||0;
+
+  openM('<div class="mtitle">'+(id?'Edit progress claim':'New progress claim')+'</div>'
+  +'<div style="background:#f4f6f9;border-radius:6px;padding:9px 12px;font-size:11px;color:#718096;margin-bottom:12px">'+curProj.proj_ref+' &mdash; work done to date '+R(Math.round(m.contract*m.pct))+', claimed so far '+R(m.claimed)+'</div>'
+  +'<div class="f2"><div class="mfr"><label>Claim number</label><input type="number" id="clNo" value="'+nextNo+'" min="1"></div><div class="mfr"><label>Period end</label><input type="date" id="clPeriod" value="'+(c?c.period_end||td():td())+'"></div></div>'
+  +'<div class="mfr"><label>Value claimed (R)</label><input type="number" id="clVal" value="'+(c?+c.value_claimed||0:Math.max(0,m.unbilled))+'" oninput="clCalc()"></div>'
+  +'<div class="mfr"><label>Status</label><select id="clStatus" onchange="clToggle()">'+CLAIM_STATUS.map(function(x){return '<option'+(c&&c.status===x?' selected':(!c&&x==='Draft'?' selected':''))+'>'+x+'</option>';}).join('')+'</select></div>'
+  +'<div id="clCertBox" style="display:none">'
+  +'<div class="mfr"><label>Value certified (R)</label><input type="number" id="clCert" value="'+(c?+c.value_certified||0:0)+'" oninput="clCalc()"></div>'
+  +'<div class="mfr"><label>Retention held (R)</label><input type="number" id="clRet" value="'+(c?+c.retention_held||0:0)+'"></div>'
+  +'</div>'
+  +'<div style="background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:11px;color:#718096;margin-bottom:11px" id="clPrev">Retention at '+retPct+'% would be <strong style="color:var(--navy)" id="clRetSug">—</strong></div>'
+  +'<div class="f2"><div class="mfr"><label>Date submitted</label><input type="date" id="clSub" value="'+(c?c.date_submitted||'':'')+'"></div><div class="mfr"><label>Date certified</label><input type="date" id="clCertD" value="'+(c?c.date_certified||'':'')+'"></div></div>'
+  +'<div class="f2"><div class="mfr"><label>Date paid</label><input type="date" id="clPaid" value="'+(c?c.date_paid||'':'')+'"></div><div class="mfr"><label>Notes</label><input id="clNotes" value="'+(c?(c.notes||'').replace(/"/g,'&quot;'):'')+'"></div></div>'
+  +'<div class="mfoot"><button class="btn" id="clCancel">Cancel</button><button class="btn btn-p" id="clSave">'+(id?'Update claim':'Save claim')+'</button></div>');
+
+  setTimeout(function(){clToggle();clCalc();},40);
+  document.getElementById('clCancel').addEventListener('click',closeM);
+  document.getElementById('clSave').addEventListener('click',function(){
+    var st=gv('clStatus');
+    var b={proj_ref:curProj.proj_ref,claim_no:+gv('clNo')||1,period_end:fmtD(gv('clPeriod')),
+      value_claimed:+gv('clVal')||0,
+      value_certified:(st==='Certified'||st==='Paid')?(+gv('clCert')||0):0,
+      retention_held:(st==='Certified'||st==='Paid')?(+gv('clRet')||0):0,
+      date_submitted:fmtD(gv('clSub')),date_certified:fmtD(gv('clCertD')),date_paid:fmtD(gv('clPaid')),
+      status:st,notes:gv('clNotes')};
+    var pr=id?dbPatch('progress_claims','id=eq.'+id,b):dbPost('progress_claims',b);
+    pr.then(function(){closeM();return loadAll();}).then(function(){go('projects');toast('Claim saved','s');}).catch(function(e){toast(e.message,'e');});
+  });
+}
+
+function clToggle(){
+  var st=gv('clStatus');
+  var b=document.getElementById('clCertBox');
+  if(b)b.style.display=(st==='Certified'||st==='Paid')?'block':'none';
+  if(st==='Submitted'||st==='Certified'||st==='Paid'){var s=document.getElementById('clSub');if(s&&!s.value)s.value=td();}
+  if(st==='Certified'||st==='Paid'){var cd=document.getElementById('clCertD');if(cd&&!cd.value)cd.value=td();
+    var cv=document.getElementById('clCert');if(cv&&!+cv.value)cv.value=+gv('clVal')||0;clCalc();}
+  if(st==='Paid'){var p=document.getElementById('clPaid');if(p&&!p.value)p.value=td();}
+}
+function clCalc(){
+  if(!curProj)return;
+  var base=+gv('clCert')||+gv('clVal')||0;
+  var r=base*((+curProj.retention_pct||0)/100);
+  var el=document.getElementById('clRetSug');
+  if(el)el.textContent=R(r);
+  var rf=document.getElementById('clRet');
+  if(rf&&!+rf.value&&r>0)rf.value=Math.round(r);
+}
+
+function oLinkJob(){
+  if(!curProj)return;
+  var avail=orders.filter(function(o){return !o.invoiced&&o.status!=='Cancelled'&&!o.master_ref&&!sameRef(o.project_ref,curProj.proj_ref);});
+  if(!avail.length){toast('No unlinked open jobs available','i');return;}
+  openM('<div class="mtitle">Link a job to '+curProj.proj_ref+'</div>'
+  +'<p style="font-size:12px;color:#718096;margin-bottom:12px">Linking a job rolls its supplier POs, WI labour and tonnage into this project\\u2019s cost performance.</p>'
+  +'<div class="mfr"><label>Job (MM number)</label><select id="ljJob" style="width:100%">'+avail.map(function(o){
+    return '<option value="'+o.id+'">'+o.ref+' — '+o.client+' ('+o.bu+') — '+R(+o.order_val||0)+(o.project_ref?' [currently on '+o.project_ref+']':'')+'</option>';
+  }).join('')+'</select></div>'
+  +'<div class="mfoot"><button class="btn" id="ljCancel">Cancel</button><button class="btn btn-p" id="ljSave">Link job</button></div>');
+  document.getElementById('ljCancel').addEventListener('click',closeM);
+  document.getElementById('ljSave').addEventListener('click',function(){
+    dbPatch('orders','id=eq.'+gv('ljJob'),{project_ref:curProj.proj_ref})
+    .then(function(){closeM();return loadAll();}).then(function(){go('projects');toast('Job linked','s');}).catch(function(e){toast(e.message,'e');});
+  });
+}
+
 function orderRow(o,isSubJob){
   var slaTd=sla(o.due,o.status);
   var finBtn=o.status==='Completed'&&!isSubJob?'<button class="btn btn-won btn-sm" data-id="'+o.id+'" data-action="toFinance">&rarr; Finance</button> ':'';
@@ -448,7 +882,7 @@ function orderRow(o,isSubJob){
   function pBadge(p){if(noBudget)return noBadge;if(p<0)return '<span style="color:#a0aec0;font-size:11px">—</span>';return p>=100?'<span style="color:#c53030;font-weight:700;font-size:11px">'+p+'%</span>':p>=85?'<span style="color:#d97706;font-weight:700;font-size:11px">'+p+'%</span>':'<span style="color:#276749;font-size:11px">'+p+'%</span>';}
   var subStyle=(isSubJob?'background:#f8fafc;':'')+(o.status==='Cancelled'?'opacity:.55;':'');
   var refDisplay=isSubJob?'<span style="color:#a0aec0;margin-right:3px">&#8627;</span><button class="btn-g" style="font-family:monospace;font-size:11px;font-weight:600;color:#4a6741;padding:2px 4px" data-id="'+o.id+'" data-action="showJobCost">'+o.ref+'</button>':'<button class="btn-g" style="font-family:monospace;font-size:11px;font-weight:600;color:var(--navy);padding:2px 4px" data-id="'+o.id+'" data-action="showJobCost">'+o.ref+'</button>';
-  return '<tr style="'+subStyle+'"><td class="mono">'+refDisplay+'</td><td>'+(isSubJob?'<span style="color:#718096;font-size:11px">'+o.client+'</span>':o.client)+'</td><td class="mono" style="font-size:11px">'+(o.client_po||'—')+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+jobDrwPill(o.ref)+'</td><td style="text-align:center">'+pBadge(cp.matPct)+'</td><td style="text-align:center">'+pBadge(cp.labPct)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+((o.status==='Cancelled'&&o.cancel_reason)?o.cancel_reason:(o.notes||''))+'">'+((o.status==='Cancelled'&&o.cancel_reason)?'<span style="color:#9b1c1c">'+o.cancel_reason+'</span>':(o.notes||'—'))+'</td><td style="white-space:nowrap">'+finBtn+(o.status==='Cancelled'?'<button class="btn-g" style="padding:2px 3px;color:#276749;font-weight:700" data-id="'+o.id+'" data-action="cancelOrder" title="Reinstate order">&#8635;</button>':'<button class="btn-g" style="padding:2px 3px" data-id="'+o.id+'" data-action="cancelOrder" title="Cancel order">&#8856;</button>'+(isSubJob?'':'<button class="btn-g" style="padding:2px 3px" data-id="'+o.id+'" data-action="returnQuote" title="Return to quoting">&#8617;</button>'))+'<button class="btn-g" style="padding:2px 3px" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" style="padding:2px 3px" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
+  return '<tr style="'+subStyle+'"><td class="mono">'+refDisplay+'</td><td>'+(isSubJob?'<span style="color:#718096;font-size:11px">'+o.client+'</span>':o.client)+'</td><td class="mono" style="font-size:11px">'+(o.client_po||'—')+(o.project_ref?'<div style="font-size:9px;color:#805ad5;font-weight:600" title="Project '+o.project_ref+'">'+o.project_ref+'</div>':'')+'</td><td><span class="badge b-bu">'+o.bu+'</span></td><td class="mono">'+R(+o.order_val)+'</td><td class="mono">'+fd(o.due)+'</td><td>'+slaTd+'</td><td style="text-align:center">'+jobDrwPill(o.ref)+'</td><td style="text-align:center">'+pBadge(cp.matPct)+'</td><td style="text-align:center">'+pBadge(cp.labPct)+'</td><td>'+obadge(o.status)+'</td><td style="white-space:normal;font-size:11px;color:#718096;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+((o.status==='Cancelled'&&o.cancel_reason)?o.cancel_reason:(o.notes||''))+'">'+((o.status==='Cancelled'&&o.cancel_reason)?'<span style="color:#9b1c1c">'+o.cancel_reason+'</span>':(o.notes||'—'))+'</td><td style="white-space:nowrap">'+finBtn+(o.status==='Cancelled'?'<button class="btn-g" style="padding:2px 3px;color:#276749;font-weight:700" data-id="'+o.id+'" data-action="cancelOrder" title="Reinstate order">&#8635;</button>':'<button class="btn-g" style="padding:2px 3px" data-id="'+o.id+'" data-action="cancelOrder" title="Cancel order">&#8856;</button>'+(isSubJob?'':'<button class="btn-g" style="padding:2px 3px" data-id="'+o.id+'" data-action="returnQuote" title="Return to quoting">&#8617;</button>'))+'<button class="btn-g" style="padding:2px 3px" data-id="'+o.id+'" data-action="editOrder">&#9998;</button><button class="btn-d" style="padding:2px 3px" data-id="'+o.id+'" data-action="delOrder">&#10005;</button></td></tr>';
 }
 
 function fOrders(){
@@ -721,13 +1155,14 @@ function oOrder(id){
   +'<div class="f2"><div class="mfr"><label>Client</label><input id="mOc" value="'+(o.client||'')+'"></div><div class="mfr"><label>Client PO number</label><input id="mOcpo" value="'+(o.client_po||'')+'"></div></div>'
   +'<div class="mfr"><label>Work type</label><input id="mOt" value="'+(o.type||'')+'"></div>'
   +'<div class="f2"><div class="mfr"><label>Order value (R)</label><input type="number" id="mOv" value="'+(o.order_val||0)+'"></div><div class="mfr"><label>Status</label><select id="mOs">'+['Open','In progress','On hold','Completed','Cancelled'].map(function(s){return '<option'+(o.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div></div>'
+  +'<div class="mfr"><label>Part of project (optional)</label><select id="mOproj"><option value="">— Standalone job —</option>'+projects.filter(function(x){return x.status==='Active';}).map(function(x){return '<option value="'+x.proj_ref+'"'+(o.project_ref===x.proj_ref?' selected':'')+'>'+x.proj_ref+' — '+(x.name||x.client)+'</option>';}).join('')+'</select></div>'
   +'<div style="background:#f4f6f9;border-radius:8px;padding:12px;margin-bottom:11px"><div style="font-size:10px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Quote Budget Split</div><div class="f2"><div class="mfr"><label>Material budget (R)</label><input type="number" id="mOmb" value="'+(o.mat_budget||0)+'"></div><div class="mfr"><label>Labour budget (R)</label><input type="number" id="mOlb" value="'+(o.lab_budget||0)+'"></div></div></div>'
   +'<div class="f2"><div class="mfr"><label>Date received</label><input type="date" id="mOrec" value="'+(o.received||td())+'"></div><div class="mfr"><label>Due date</label><input type="date" id="mOd" value="'+(o.due||'')+'"></div></div>'
   +'<div class="mfr"><label>Notes</label><textarea id="mOn">'+(o.notes||'')+'</textarea></div>'
   +'<div class="mfoot"><button class="btn" id="cancelOrd">Cancel</button><button class="btn btn-p" id="saveOrd">Save order</button></div>');
   document.getElementById('cancelOrd').addEventListener('click',closeM);
   document.getElementById('saveOrd').addEventListener('click',function(){
-    var b={ref:gv('mOr'),client:gv('mOc'),client_po:gv('mOcpo'),bu:gv('mOb'),type:gv('mOt'),order_val:+gv('mOv')||0,mat_budget:+gv('mOmb')||0,lab_budget:+gv('mOlb')||0,received:fmtD(gv('mOrec')),due:fmtD(gv('mOd')),status:gv('mOs'),job_cards:id?(function(){for(var i=0;i<orders.length;i++){if(orders[i].id===id)return orders[i].job_cards||0;}return 0;})():0,invoiced:false,notes:gv('mOn')};
+    var b={ref:gv('mOr'),client:gv('mOc'),client_po:gv('mOcpo'),project_ref:gv('mOproj'),bu:gv('mOb'),type:gv('mOt'),order_val:+gv('mOv')||0,mat_budget:+gv('mOmb')||0,lab_budget:+gv('mOlb')||0,received:fmtD(gv('mOrec')),due:fmtD(gv('mOd')),status:gv('mOs'),job_cards:id?(function(){for(var i=0;i<orders.length;i++){if(orders[i].id===id)return orders[i].job_cards||0;}return 0;})():0,invoiced:false,notes:gv('mOn')};
     var p=id?dbPatch('orders','id=eq.'+id,b):dbPost('orders',b);
     p.then(function(){closeM();return loadAll();}).then(function(){go('orders');toast('Order saved','s');}).catch(function(e){toast(e.message,'e');});
   });
@@ -3653,6 +4088,12 @@ document.addEventListener('click',function(e){
   if(tid==='rptProdBtn'){rProdReport();return;}
   if(tid==='rptBepBtn'){rBEP();return;}
   if(tid==='setHrsBtn'){oSetHours();return;}
+  if(tid==='addProjBtn'){oProj(null);return;}
+  if(tid==='projBackBtn'){curProj=null;go('projects');return;}
+  if(tid==='projEditBtn'){if(curProj)oProj(curProj.id);return;}
+  if(tid==='addSIBtn'){oSI(null);return;}
+  if(tid==='addClaimBtn'){oClaim(null);return;}
+  if(tid==='linkJobBtn'){oLinkJob();return;}
   if(tid==='addDrwBtn'){oDrw(null);return;}
   if(tid==='plExpandBtn'){planr.forEach(function(p){plOpen[p.id]=true;});renderPlanner();return;}
   if(tid==='plCollapseBtn'){plOpen={};renderPlanner();return;}
@@ -3708,6 +4149,25 @@ document.addEventListener('click',function(e){
   if(action==='editInv')oInv(id);
   if(action==='editLR')oLR(id);
   if(action==='delLR')cfm('Delete employee','Remove this employee?',function(){dbDel('labour_rates','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('lrates');toast('Deleted','s');});});
+  if(action==='openProj'){for(var pq=0;pq<projects.length;pq++){if(projects[pq].id===id){curProj=projects[pq];break;}}go('projects');return;}
+  if(action==='editProj'){oProj(id);return;}
+  if(action==='delProj'){
+    var pd=null;for(var pz=0;pz<projects.length;pz++){if(projects[pz].id===id){pd=projects[pz];break;}}
+    if(!pd)return;
+    var lj=projOrders(pd.proj_ref).length,ls=projSIs(pd.proj_ref).length,lc=projClaims(pd.proj_ref).length;
+    cfm('Delete project '+pd.proj_ref,(lj||ls||lc)?'This project has '+lj+' linked job(s), '+ls+' SI(s) and '+lc+' claim(s).<br><br>Jobs stay in the Order Book but are unlinked. SIs and claims are deleted permanently.':'Delete this project?',function(){
+      Promise.all(projOrders(pd.proj_ref).map(function(o){return dbPatch('orders','id=eq.'+o.id,{project_ref:''});}))
+      .then(function(){return Promise.all(projSIs(pd.proj_ref).map(function(s){return dbDel('site_instructions','id=eq.'+s.id);}));})
+      .then(function(){return Promise.all(projClaims(pd.proj_ref).map(function(c){return dbDel('progress_claims','id=eq.'+c.id);}));})
+      .then(function(){return dbDel('projects','id=eq.'+id);})
+      .then(function(){curProj=null;return loadAll();}).then(function(){go('projects');toast('Project deleted','s');});
+    });
+    return;
+  }
+  if(action==='editSI'){oSI(id);return;}
+  if(action==='delSI'){cfm('Delete site instruction','Permanently delete this SI?',function(){dbDel('site_instructions','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('projects');toast('Deleted','s');});});return;}
+  if(action==='editClaim'){oClaim(id);return;}
+  if(action==='delClaim'){cfm('Delete progress claim','Permanently delete this claim?',function(){dbDel('progress_claims','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('projects');toast('Deleted','s');});});return;}
   if(action==='editDrw'){oDrw(id);return;}
   if(action==='delDrw'){cfm('Delete drawing','Permanently delete this drawing record?',function(){dbDel('drawings','id=eq.'+id).then(function(){return loadAll();}).then(function(){go('drawings');toast('Deleted','s');});});return;}
   if(action==='plToggle'){plOpen[id]=!plOpen[id];renderPlanner();return;}
