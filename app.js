@@ -20,7 +20,8 @@ var USERS=[
   {u:'consthod',p:'MM@Const2026',name:'Const HOD',role:'HOD',bu:'Construction'},
   {u:'wearhod',p:'MM@Wear2026',name:'Wear HOD',role:'HOD',bu:'Wear Protection'},
   {u:'planner',p:'MM@Plan2026',name:'Planner',role:'Planner'},
-  {u:'draughting',p:'MM@Draw2026',name:'Draughting',role:'Draughting'}
+  {u:'draughting',p:'MM@Draw2026',name:'Draughting',role:'Draughting'},
+  {u:'tian',p:'MM@Tian2026',name:'Tian Joubert',role:'Project Manager'}
 ];
 var leads=[],orders=[],spos=[],jcs=[],invs=[],lrates=[],wis=[],msettings=[],planr=[],drws=[],bepd=[],projects=[],sis=[],pclaims=[],cUser=null;
 var plView='week';
