@@ -165,12 +165,13 @@ function xlx(data,cols,file,sheet){
 }
 
 function go(tab){
-  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,fin:rFin,wi:rWI,jcosting:rJobCosting,lrates:rLRates,reports:rReports,planner:rPlanner,drawings:rDrawings,projects:rProjects};
+  var renders={dash:rDash,leads:rLeads,orders:rOrders,buyer:rBuyer,fin:rFin,wi:rWI,jcosting:rJobCosting,lrates:rLRates,reports:rReports,planner:rPlanner,drawings:rDrawings,projects:rProjects,wip:rWIP};
   var body=document.getElementById('body');
   body.innerHTML=renders[tab]?renders[tab]():'';
   if(tab==='planner')setTimeout(renderPlanner,0);
   if(tab==='leads')setTimeout(fLeads,0);
   if(tab==='orders')setTimeout(fOrders,0);
+  if(tab==='wip')setTimeout(function(){wipBind();fWIP();},0);
 }
 
 function getJobCostPct(ref,quoteVal){
@@ -4222,3 +4223,292 @@ window.onload=function(){
   var s=null;try{s=sessionStorage.getItem('mm');}catch(e){}
   if(s){try{cUser=JSON.parse(s);launch();}catch(e){}}
 };
+
+/* ============================================================
+   WORK IN PROGRESS  (ageing-led morning meeting view)
+   ============================================================ */
+var wipBucket=null;
+var WIP_BUCKETS=[[0,30],[31,60],[61,90],[91,99999]];
+var WIP_BCOL=['#38a169','#d69e2e','#dd6b20','#c53030'];
+var WIP_BLBL=['0 – 30 days','31 – 60 days','61 – 90 days','90+ days'];
+
+function wipAge(o){
+  if(!o.received)return 0;
+  var d=dd(o.received);
+  return d<0?Math.abs(d):0;
+}
+function wipMoved(o){
+  var base=o.action_updated||o.received;
+  if(!base)return 0;
+  var d=dd(base);
+  return d<0?Math.abs(d):0;
+}
+function wipBase(){
+  return orders.filter(function(o){
+    if(o.invoiced)return false;
+    if(o.status==='Completed'||o.status==='Cancelled')return false;
+    if(cUser&&cUser.role==='HOD'&&o.bu!==cUser.bu&&(!cUser.bu2||o.bu!==cUser.bu2))return false;
+    return true;
+  });
+}
+function wipBucketOf(a){return a<=30?0:a<=60?1:a<=90?2:3;}
+function wipAgePill(a){
+  var i=wipBucketOf(a);
+  var bg=['#f0fff4','#fffbeb','#fffaf0','#fff5f5'][i];
+  var fg=['#276749','#92400e','#c05621','#9b1c1c'][i];
+  return '<span class="mono" style="font-weight:700;padding:2px 7px;border-radius:4px;display:inline-block;min-width:44px;text-align:right;background:'+bg+';color:'+fg+'">'+a+'d</span>';
+}
+function wipFlags(o){
+  var a=wipAge(o),mv=wipMoved(o),f=[];
+  var s='font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:3px;white-space:nowrap;';
+  if(!o.due)f.push('<span style="'+s+'background:#fff5f5;color:#9b1c1c" title="No due date">NO DUE</span>');
+  if(!(+o.order_val))f.push('<span style="'+s+'background:#fffaf0;color:#c05621" title="No value captured">R0</span>');
+  if(!o.planned_date&&a>60)f.push('<span style="'+s+'background:#fffbeb;color:#92400e" title="No planned date">NO PLAN</span>');
+  if(mv>=30)f.push('<span style="'+s+'background:#f7fafc;color:#4a5568" title="No movement in '+mv+' days">STALLED</span>');
+  return f.length?f.join(''):'<span style="color:#cbd5e0">—</span>';
+}
+
+function rWIP(){
+  var L=wipBase();
+  var tot=L.reduce(function(s,o){return s+(+o.order_val||0);},0);
+  var aged=L.filter(function(o){return wipAge(o)>90;});
+  var agedV=aged.reduce(function(s,o){return s+(+o.order_val||0);},0);
+  var noDue=L.filter(function(o){return !o.due;}).length;
+  var late=L.filter(function(o){return o.due&&dd(o.due)<0;});
+  var lateV=late.reduce(function(s,o){return s+(+o.order_val||0);},0);
+  var noPlan=L.filter(function(o){return !o.planned_date;}).length;
+  var stalled=L.filter(function(o){return wipMoved(o)>=30;}).length;
+
+  var bc=[0,0,0,0],bv=[0,0,0,0];
+  L.forEach(function(o){var i=wipBucketOf(wipAge(o));bc[i]++;bv[i]+=(+o.order_val||0);});
+  var maxV=Math.max(tot,1);
+
+  var h='<div class="kpis">'
+  +'<div class="kpi cn"><div class="kpi-l">Live WIP</div><div class="kpi-v">'+R(tot)+'</div><div class="kpi-s">'+L.length+' jobs &middot; excl. invoiced &amp; completed</div></div>'
+  +'<div class="kpi '+(aged.length?'cr':'cg')+'"><div class="kpi-l">Aged 90+ days</div><div class="kpi-v">'+R(agedV)+'</div><div class="kpi-s">'+aged.length+' jobs &middot; '+(tot>0?Math.round(agedV/tot*100):0)+'% of WIP</div></div>'
+  +'<div class="kpi '+(noDue?'ca':'cg')+'"><div class="kpi-l">No due date</div><div class="kpi-v">'+noDue+'</div><div class="kpi-s">'+(L.length?Math.round(noDue/L.length*100):0)+'% of the book</div></div>'
+  +'<div class="kpi '+(late.length?'cr':'cg')+'"><div class="kpi-l">Past due</div><div class="kpi-v">'+late.length+'</div><div class="kpi-s">'+R(lateV)+'</div></div>'
+  +'<div class="kpi '+(noPlan?'ca':'cg')+'"><div class="kpi-l">No planned date</div><div class="kpi-v">'+noPlan+'</div><div class="kpi-s">Set in the meeting</div></div>'
+  +'<div class="kpi '+(stalled?'cgo':'cg')+'"><div class="kpi-l">Stalled 30+ days</div><div class="kpi-v">'+stalled+'</div><div class="kpi-s">No action movement</div></div>'
+  +'</div>';
+
+  // ageing strip
+  h+='<div class="card"><div class="card-hd"><h3>Ageing &mdash; days since order received</h3>'
+   +'<div class="card-hd-r"><span style="font-size:11px;color:var(--muted)">Click a bucket to filter</span>'
+   +'<button class="btn btn-sm" id="wipClr">Show all</button></div></div>'
+   +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">';
+  for(var i=0;i<4;i++){
+    var selc=(wipBucket===i);
+    h+='<button class="wipab" data-b="'+i+'" style="text-align:left;background:'+(selc?'#ebf4ff':'#fff')+';border:none;border-right:1px solid var(--border);border-top:3px solid '+WIP_BCOL[i]+';padding:12px 15px;cursor:pointer;font-family:inherit;width:100%">'
+     +'<div class="kpi-l">'+WIP_BLBL[i]+'</div>'
+     +'<div class="kpi-v" style="font-size:17px">'+R(bv[i])+'</div>'
+     +'<div class="kpi-s">'+bc[i]+' jobs &middot; '+(tot>0?Math.round(bv[i]/tot*100):0)+'%</div>'
+     +'<div style="height:4px;background:#edf2f7;border-radius:3px;margin-top:8px;overflow:hidden"><i style="display:block;height:100%;border-radius:3px;width:'+(tot>0?bv[i]/maxV*100:0)+'%;background:'+WIP_BCOL[i]+'"></i></div>'
+     +'</button>';
+  }
+  h+='</div></div>';
+
+  // BU bars
+  var bus={};
+  L.forEach(function(o){
+    var k=o.bu||'Unassigned';
+    if(!bus[k])bus[k]={v:0,n:0,b:[0,0,0,0]};
+    bus[k].v+=(+o.order_val||0);bus[k].n++;
+    bus[k].b[wipBucketOf(wipAge(o))]+=((+o.order_val||0)||1);
+  });
+  var arr=Object.keys(bus).map(function(k){return [k,bus[k]];}).sort(function(a,b){return b[1].v-a[1].v;});
+  var bmax=arr.length?(arr[0][1].v||1):1;
+  h+='<div class="card"><div class="card-hd"><h3>WIP by business unit</h3><div class="card-hd-r"><span style="font-size:11px;color:var(--muted)">Segments are ageing buckets</span></div></div>'
+   +'<div style="padding:12px 17px;display:flex;flex-direction:column;gap:9px">';
+  arr.forEach(function(x){
+    var k=x[0],d=x[1],bt=d.b.reduce(function(s,y){return s+y;},0)||1;
+    var segs='';
+    for(var j=0;j<4;j++){if(d.b[j])segs+='<i style="display:block;height:100%;width:'+(d.b[j]/bt*100)+'%;background:'+WIP_BCOL[j]+'"></i>';}
+    h+='<div style="display:grid;grid-template-columns:120px 1fr 110px 44px;gap:10px;align-items:center;font-size:12px">'
+     +'<div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+k+'</div>'
+     +'<div style="height:17px;background:#f1f5f9;border-radius:4px;overflow:hidden;display:flex;width:'+Math.max(8,d.v/bmax*100)+'%">'+segs+'</div>'
+     +'<div class="mono" style="text-align:right">'+R(d.v)+'</div>'
+     +'<div class="mono" style="text-align:right;color:var(--muted)">'+d.n+'</div></div>';
+  });
+  h+='</div><div style="display:flex;gap:14px;flex-wrap:wrap;font-size:10px;color:var(--muted);padding:0 17px 12px">';
+  for(var g=0;g<4;g++){h+='<span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;background:'+WIP_BCOL[g]+'"></i>'+WIP_BLBL[g].replace(' days','').replace(' – ','–')+'</span>';}
+  h+='</div></div>';
+
+  // job list
+  h+='<div class="card"><div class="card-hd"><h3>Job list <span id="wipCnt" style="font-weight:400;color:var(--muted);font-size:11px"></span></h3>'
+   +'<div class="card-hd-r"><button class="btn btn-sm" id="wipPrint">Print agenda</button>'
+   +'<button class="btn btn-sm" id="wipXl">Excel</button></div></div>'
+   +'<div class="toolbar"><input id="wipQ" placeholder="Search job, client or owner...">'
+   +'<select id="wipBU"><option value="">All BUs</option>'+BUS.map(function(b){return '<option>'+b+'</option>';}).join('')+'</select>'
+   +'<select id="wipSt"><option value="">All statuses</option>'+['Open','In progress','On hold'].map(function(s){return '<option>'+s+'</option>';}).join('')+'</select>'
+   +'<select id="wipFl"><option value="">All jobs</option><option>Needs a date</option><option>Stalled 30+ days</option><option>No value</option><option>No owner</option></select>'
+   +'</div>'
+   +'<div class="tw"><table><thead><tr>'
+   +'<th>Job #</th><th>Client</th><th>Value</th><th style="text-align:center">Age</th>'
+   +'<th>Due</th><th>Planned</th><th>Status</th><th>Owner</th><th>Next action</th>'
+   +'<th style="text-align:center">Last moved</th><th>Flags</th><th>Actions</th>'
+   +'</tr></thead><tbody id="wtb"><tr><td colspan="12" class="empty">Loading...</td></tr></tbody></table></div>'
+   +'<div class="hint" style="font-size:11px;color:var(--muted);padding:9px 17px;background:#fcfcfd;border-top:1px solid var(--border);line-height:1.5">'
+   +'Grouped by business unit, oldest first. <strong>Last moved</strong> is days since the next action was changed &mdash; it shows which jobs are being carried rather than worked.</div>'
+   +'</div>';
+  return h;
+}
+
+function fWIP(){
+  var s=(gv('wipQ')||'').toLowerCase(),bu=gv('wipBU'),st=gv('wipSt'),fl=gv('wipFl');
+  var f=wipBase().filter(function(o){
+    var a=wipAge(o);
+    if(wipBucket!==null){var b=WIP_BUCKETS[wipBucket];if(a<b[0]||a>b[1])return false;}
+    if(bu&&o.bu!==bu)return false;
+    if(st&&o.status!==st)return false;
+    if(fl==='Needs a date'&&o.due)return false;
+    if(fl==='Stalled 30+ days'&&wipMoved(o)<30)return false;
+    if(fl==='No value'&&(+o.order_val))return false;
+    if(fl==='No owner'&&o.wip_owner)return false;
+    if(s&&((o.ref||'')+(o.client||'')+(o.wip_owner||'')+(o.bu||'')).toLowerCase().indexOf(s)<0)return false;
+    return true;
+  });
+  f.sort(function(a,b){
+    var ab=(a.bu||'zz'),bb=(b.bu||'zz');
+    if(ab!==bb)return ab<bb?-1:1;
+    return wipAge(b)-wipAge(a);
+  });
+  var rows='',cur='__';
+  f.forEach(function(o){
+    var k=o.bu||'Unassigned';
+    if(k!==cur){
+      cur=k;
+      var g=f.filter(function(x){return (x.bu||'Unassigned')===k;});
+      var gv2=g.reduce(function(s2,x){return s2+(+x.order_val||0);},0);
+      rows+='<tr><td colspan="12" style="background:#f1f5f9;font-weight:600;font-size:11px;color:var(--navy);padding:7px 16px">'+k+' &nbsp;&middot;&nbsp; '+g.length+' jobs &nbsp;&middot;&nbsp; '+R(gv2)+'</td></tr>';
+    }
+    var a=wipAge(o),mv=wipMoved(o);
+    rows+='<tr>'
+     +'<td class="mono">'+(o.ref||'')+'</td>'
+     +'<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis" title="'+(o.client||'').replace(/"/g,'')+'">'+(o.client||'')+'</td>'
+     +'<td class="mono">'+((+o.order_val)?R(o.order_val):'<span style="color:#cbd5e0">—</span>')+'</td>'
+     +'<td style="text-align:center">'+wipAgePill(a)+'</td>'
+     +'<td class="mono">'+(o.due?fd(o.due):'<span style="color:#cbd5e0">—</span>')+'</td>'
+     +'<td class="mono">'+(o.planned_date?'<span style="color:#276749;font-weight:500">'+fd(o.planned_date)+'</span>':'<span style="color:#cbd5e0">—</span>')+'</td>'
+     +'<td>'+obadge(o.status)+'</td>'
+     +'<td style="font-size:11px'+(o.wip_owner?'':';color:#cbd5e0;font-style:italic')+'">'+(o.wip_owner||'unassigned')+'</td>'
+     +'<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:#4a5568'+(o.next_action?'':';color:#cbd5e0;font-style:italic')+'" title="'+(o.next_action||'').replace(/"/g,'')+'">'+(o.next_action||'none set')+'</td>'
+     +'<td style="text-align:center"><span class="mono"'+(mv>=30?' style="color:#c53030;font-weight:700"':'')+'>'+mv+'d</span></td>'
+     +'<td>'+wipFlags(o)+'</td>'
+     +'<td><button class="btn-g wipE" data-id="'+o.id+'" title="Update">&#9998;</button></td>'
+     +'</tr>';
+  });
+  var tv=f.reduce(function(s2,o){return s2+(+o.order_val||0);},0);
+  document.getElementById('wtb').innerHTML=rows||'<tr><td colspan="12" class="empty">No jobs match</td></tr>';
+  var c=document.getElementById('wipCnt');
+  if(c)c.textContent='— '+f.length+' shown · '+R(tv);
+  Array.prototype.forEach.call(document.querySelectorAll('.wipE'),function(b){
+    b.addEventListener('click',function(){oWIP(b.getAttribute('data-id'));});
+  });
+}
+
+function wipBind(){
+  Array.prototype.forEach.call(document.querySelectorAll('.wipab'),function(b){
+    b.addEventListener('click',function(){
+      var i=+b.getAttribute('data-b');
+      wipBucket=(wipBucket===i)?null:i;
+      go('wip');
+    });
+  });
+  var c=document.getElementById('wipClr');
+  if(c)c.addEventListener('click',function(){wipBucket=null;go('wip');});
+  ['wipQ','wipBU','wipSt','wipFl'].forEach(function(id){
+    var e=document.getElementById(id);
+    if(e)e.addEventListener(id==='wipQ'?'input':'change',fWIP);
+  });
+  var p=document.getElementById('wipPrint');
+  if(p)p.addEventListener('click',printWIP);
+  var x=document.getElementById('wipXl');
+  if(x)x.addEventListener('click',function(){
+    var L=wipBase().slice().sort(function(a,b){return wipAge(b)-wipAge(a);});
+    xlx(L.map(function(o){return {ref:o.ref,client:o.client,bu:o.bu,val:+o.order_val||0,
+      age:wipAge(o),due:o.due||'',plan:o.planned_date||'',st:o.status,
+      own:o.wip_owner||'',act:o.next_action||'',mv:wipMoved(o)};}),
+      [{l:'Job #',k:'ref',w:12},{l:'Client',k:'client',w:34},{l:'BU',k:'bu',w:16},
+       {l:'Value',k:'val',w:14},{l:'Age (days)',k:'age',w:11},{l:'Due',k:'due',w:12},
+       {l:'Planned',k:'plan',w:12},{l:'Status',k:'st',w:13},{l:'Owner',k:'own',w:14},
+       {l:'Next action',k:'act',w:40},{l:'Last moved',k:'mv',w:11}],
+      'MM_WIP_'+td()+'.xlsx','WIP');
+  });
+}
+
+function oWIP(id){
+  var o=null;for(var i=0;i<orders.length;i++){if(orders[i].id===id){o=orders[i];break;}}
+  if(!o)return;
+  var owners={};
+  orders.forEach(function(x){if(x.wip_owner)owners[x.wip_owner]=1;});
+  CAPTAINS.forEach(function(x){owners[x]=1;});
+  var olist=Object.keys(owners).sort();
+  openM('<div class="mtitle">'+(o.ref||'')+' &mdash; WIP update</div>'
+   +'<div style="background:#f4f6f9;border-radius:8px;padding:11px;margin-bottom:12px;font-size:12px;line-height:1.7">'
+   +'<strong>'+(o.client||'')+'</strong><br>'
+   +(o.bu||'')+' &middot; '+((+o.order_val)?R(o.order_val):'no value captured')+' &middot; '
+   +wipAge(o)+' days old'+(o.due?' &middot; due '+fd(o.due):' &middot; <span style="color:#9b1c1c">no due date</span>')+'</div>'
+   +'<div class="f2">'
+   +'<div class="mfr"><label>Planned date</label><input type="date" id="wPlan" value="'+(o.planned_date||'')+'"></div>'
+   +'<div class="mfr"><label>Due date</label><input type="date" id="wDue" value="'+(o.due||'')+'"></div></div>'
+   +'<div class="f2">'
+   +'<div class="mfr"><label>Owner</label><input id="wOwn" list="wOwnL" value="'+(o.wip_owner||'').replace(/"/g,'')+'" placeholder="Who owns this">'
+   +'<datalist id="wOwnL">'+olist.map(function(n){return '<option value="'+n+'">';}).join('')+'</datalist></div>'
+   +'<div class="mfr"><label>Status</label><select id="wSt">'+['Open','In progress','On hold'].map(function(s){return '<option'+(o.status===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></div></div>'
+   +'<div class="mfr"><label>Next action</label><textarea id="wAct" placeholder="One thing that moves this job forward">'+(o.next_action||'')+'</textarea></div>'
+   +'<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Last moved '+wipMoved(o)+' days ago. Saving a changed action resets that counter.</div>'
+   +'<div class="mfoot"><button class="btn" id="wCan">Cancel</button><button class="btn btn-p" id="wSav">Save</button></div>');
+  document.getElementById('wCan').addEventListener('click',closeM);
+  document.getElementById('wSav').addEventListener('click',function(){
+    var act=gv('wAct');
+    var b={planned_date:fmtD(gv('wPlan')),due:fmtD(gv('wDue')),wip_owner:gv('wOwn'),
+           next_action:act,status:gv('wSt')};
+    if(act!==(o.next_action||''))b.action_updated=td();
+    dbPatch('orders','id=eq.'+id,b)
+      .then(function(){closeM();return loadAll();})
+      .then(function(){go('wip');toast('WIP updated','s');})
+      .catch(function(e){toast(e.message,'e');});
+  });
+}
+
+function printWIP(){
+  var L=wipBase().slice().sort(function(a,b){
+    var ab=(a.bu||'zz'),bb=(b.bu||'zz');
+    if(ab!==bb)return ab<bb?-1:1;
+    return wipAge(b)-wipAge(a);
+  });
+  var tot=L.reduce(function(s,o){return s+(+o.order_val||0);},0);
+  var rows='',cur='__';
+  L.forEach(function(o){
+    var k=o.bu||'Unassigned';
+    if(k!==cur){cur=k;rows+='<tr class="g"><td colspan="8">'+k+'</td></tr>';}
+    rows+='<tr><td class="m">'+(o.ref||'')+'</td><td>'+(o.client||'')+'</td>'
+     +'<td class="m r">'+((+o.order_val)?R(o.order_val):'—')+'</td>'
+     +'<td class="m c">'+wipAge(o)+'d</td>'
+     +'<td class="m">'+(o.due?fd(o.due):'—')+'</td>'
+     +'<td class="m">'+(o.planned_date?fd(o.planned_date):'')+'</td>'
+     +'<td>'+(o.wip_owner||'')+'</td>'
+     +'<td>'+(o.next_action||'')+'</td></tr>';
+  });
+  var w=window.open('','_blank');
+  w.document.write('<html><head><title>WIP Agenda '+td()+'</title><style>'
+   +'*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:14mm 10mm;color:#1a202c}'
+   +'h1{font-size:15pt;color:#0f1923;margin:0 0 2px}'
+   +'.sub{font-size:9pt;color:#718096;margin-bottom:12px;border-bottom:2px solid #0f1923;padding-bottom:8px}'
+   +'table{width:100%;border-collapse:collapse}'
+   +'th{text-align:left;font-size:7.5pt;text-transform:uppercase;letter-spacing:.05em;color:#718096;border-bottom:1px solid #cbd5e0;padding:5px 4px}'
+   +'td{padding:5px 4px;border-bottom:1px solid #edf2f7;vertical-align:top}'
+   +'tr.g td{background:#f1f5f9;font-weight:bold;font-size:8.5pt;padding:5px 4px}'
+   +'.m{font-family:Consolas,monospace;font-size:8pt}.r{text-align:right}.c{text-align:center}'
+   +'@page{size:A4 landscape;margin:10mm}'
+   +'</style></head><body>'
+   +'<h1>Work in Progress &mdash; Morning Meeting</h1>'
+   +'<div class="sub">Mine Minerals Supplies &amp; Services &nbsp;&middot;&nbsp; '+fd(td())
+   +' &nbsp;&middot;&nbsp; '+L.length+' live jobs &nbsp;&middot;&nbsp; '+R(tot)+'</div>'
+   +'<table><thead><tr><th>Job #</th><th>Client</th><th class="r">Value</th><th class="c">Age</th>'
+   +'<th>Due</th><th>Planned</th><th>Owner</th><th>Next action</th></tr></thead><tbody>'
+   +rows+'</tbody></table></body></html>');
+  w.document.close();
+  setTimeout(function(){w.print();},400);
+}
